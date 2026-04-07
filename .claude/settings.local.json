@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(\"/Users/cmc/Downloads/Company Costing:*)",
+      "Bash(__NEW_LINE_aab02346c8b66525__ cat:*)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
