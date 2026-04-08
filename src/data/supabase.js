@@ -95,9 +95,21 @@ export async function saveExpense(expense, userId) {
 }
 
 export async function deleteExpense(id) {
-  const { error } = await supabase.from('expenses').delete().eq('id', id)
-  if (error) console.error('deleteExpense:', error)
-  return { error }
+  const { data, error } = await supabase.from('expenses').delete().eq('id', id).select()
+  if (error) { console.error('deleteExpense:', error); return { error } }
+  if (!data?.length) {
+    const err = new Error('Delete failed — the database did not remove the record. Check your Supabase DELETE policy.')
+    console.error('deleteExpense:', err.message, 'id:', id)
+    return { error: err }
+  }
+  return { error: null }
+}
+
+export async function deleteExpensesByRecurringId(recurringId) {
+  // Delete all expenses linked to a recurring item (may be 0 rows, that's fine)
+  const { error } = await supabase.from('expenses').delete().eq('recurring_id', recurringId)
+  if (error) { console.error('deleteExpensesByRecurringId:', error); return { error } }
+  return { error: null }
 }
 
 // ── Recurring ───────────────────────────────────────────────────────
@@ -120,16 +132,31 @@ export async function saveOneRecurring(item, userId) {
 }
 
 export async function deleteRecurring(id) {
-  const { error } = await supabase.from('recurring').delete().eq('id', id)
-  if (error) console.error('deleteRecurring:', error)
-  return { error }
+  const { data, error } = await supabase.from('recurring').delete().eq('id', id).select()
+  if (error) { console.error('deleteRecurring:', error); return { error } }
+  if (!data?.length) {
+    const err = new Error('Delete failed — the database did not remove the record. Check your Supabase DELETE policy.')
+    console.error('deleteRecurring:', err.message, 'id:', id)
+    return { error: err }
+  }
+  return { error: null }
 }
 
 // ── Settings ────────────────────────────────────────────────────────
+// DB uses company_name (snake_case), app uses companyName (camelCase)
+function settingsFromDB(s) {
+  if (!s) return null
+  return {
+    companyName: s.company_name || 'Company Costs',
+    tagline:     s.tagline     || 'Cost tracking dashboard',
+    theme:       s.theme       || 'light',
+  }
+}
+
 export async function loadSettings(userId) {
   const { data, error } = await supabase.from('settings').select('*').eq('user_id', userId).single()
   if (error && error.code !== 'PGRST116') console.error('loadSettings:', error)
-  return { data, error: error?.code === 'PGRST116' ? null : error }
+  return { data: settingsFromDB(data), error: error?.code === 'PGRST116' ? null : error }
 }
 
 export async function saveSettings(settings, userId) {
