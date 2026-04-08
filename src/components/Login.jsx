@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Mail, Lock, LogIn } from 'lucide-react'
 import { signUp, signIn } from '../data/supabase'
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, onForgotPassword }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -100,18 +100,32 @@ export default function Login({ onLoginSuccess }) {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm">
-          <span style={{ color: 'var(--text-3)' }}>
-            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-          </span>
-          <button
-            type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="font-semibold"
-            style={{ color: '#7c3aed' }}
-          >
-            {isSignUp ? 'Sign In' : 'Sign Up'}
-          </button>
+        {/* Forgot Password & Toggle Sign Up */}
+        <div className="mt-6 space-y-3">
+          {!isSignUp && (
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="w-full text-sm"
+              style={{ color: '#7c3aed' }}
+            >
+              Forgot password?
+            </button>
+          )}
+          
+          <div className="text-center text-sm">
+            <span style={{ color: 'var(--text-3)' }}>
+              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="font-semibold"
+              style={{ color: '#7c3aed' }}
+            >
+              {isSignUp ? 'Sign In' : 'Sign Up'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

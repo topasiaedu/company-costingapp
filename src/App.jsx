@@ -7,6 +7,8 @@ import ExpenseModal from './components/ExpenseModal'
 import RecurringManager from './components/RecurringManager'
 import Settings from './components/Settings'
 import Login from './components/Login'
+import ResetPassword from './components/ResetPassword'
+import ResetPasswordForm from './components/ResetPasswordForm'
 import { genId } from './data/store'
 import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY_SETTINGS, DEFAULT_SETTINGS } from './data/store'
 import {
@@ -45,6 +47,7 @@ const TABS = [
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [authScreen, setAuthScreen] = useState('login') // 'login', 'reset', 'reset-form'
   const [tab, setTab] = useState('dashboard')
   const [expenses, setExpenses] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -54,8 +57,15 @@ export default function App() {
   const [expenseModal, setExpenseModal] = useState(null)
   const [mobileNav, setMobileNav] = useState(false)
 
+  // Check user session on mount
   useEffect(() => {
     async function checkUser() {
+      // Check if we're on a reset password page
+      const hash = window.location.hash
+      if (hash.includes('type=recovery')) {
+        setAuthScreen('reset-form')
+      }
+      
       const currentUser = await getCurrentUser()
       setUser(currentUser)
       setLoading(false)
@@ -63,6 +73,7 @@ export default function App() {
     checkUser()
   }, [])
 
+  // Load data when user logs in
   useEffect(() => {
     if (!user) return
 
@@ -93,6 +104,7 @@ export default function App() {
     loadData()
   }, [user])
 
+  // Apply theme
   useEffect(() => {
     const html = document.documentElement
     if (settings.theme === 'dark') html.classList.add('dark')
@@ -177,6 +189,7 @@ export default function App() {
     await saveRecurring(updated, user.id)
   }, [user, recurring])
 
+  // Loading screen
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
@@ -191,10 +204,22 @@ export default function App() {
     )
   }
 
-  if (!user) {
-    return <Login onLoginSuccess={setUser} />
+  // Reset password form screen
+  if (authScreen === 'reset-form') {
+    return <ResetPasswordForm onSuccess={() => setAuthScreen('login')} />
   }
 
+  // Reset password request screen
+  if (authScreen === 'reset') {
+    return <ResetPassword onBack={() => setAuthScreen('login')} />
+  }
+
+  // Login screen
+  if (!user) {
+    return <Login onLoginSuccess={setUser} onForgotPassword={() => setAuthScreen('reset')} />
+  }
+
+  // Main app
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
       <aside
