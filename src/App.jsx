@@ -1,16 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
 import { format } from 'date-fns'
-import { LayoutDashboard, List, RefreshCw, Settings as SettingsIcon, Menu, X, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, List, RefreshCw, Settings as SettingsIcon, Menu, X, Sun, Moon, LogOut } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ExpensesTable from './components/ExpensesTable'
 import ExpenseModal from './components/ExpenseModal'
 import RecurringManager from './components/RecurringManager'
 import Settings from './components/Settings'
+import Login from './components/Login'
+import { genId } from './data/store'
+import { DEFAULT_CATEGORIES, DEFAULT_CURRENCY_SETTINGS, DEFAULT_SETTINGS } from './data/store'
 import {
-  loadExpenses, saveExpenses, loadRecurring, saveRecurring,
-  loadSettings, saveSettings, loadCategories, saveCategories,
-  loadCurrencySettings, saveCurrencySettings, genId,
-} from './data/store'
+  getCurrentUser, signOut,
+  loadExpenses, saveExpense, deleteExpense,
+  loadRecurring, saveRecurring, deleteRecurring,
+  loadSettings, saveSettings,
+  loadCategories, saveCategories,
+  loadCurrencySettings, saveCurrencySettings
+} from './data/supabase'
 
 function applyRecurring(expenses, recurring) {
   const now = new Date()
@@ -19,10 +25,10 @@ function applyRecurring(expenses, recurring) {
   const result = [...expenses]
   for (const r of recurring) {
     if (!r.active) continue
-    if (r.endDate && r.endDate < `${ym}-01`) continue // past end date
-    const dateStr = `${ym}-${String(r.billingDay).padStart(2,'0')}`
-    if (!result.some(e => e.recurringId === r.id && e.date?.startsWith(ym))) {
-      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, recurringId: r.id, notes: r.notes ?? '' })
+    if (r.end_date && r.end_date < `${ym}-01`) continue
+    const dateStr = `${ym}-${String(r.billing_day).padStart(2,'0')}`
+    if (!result.some(e => e.recurring_id === r.id && e.date?.startsWith(ym))) {
+      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, recurring_id: r.id, notes: r.notes ?? '' })
       changed = true
     }
   }
@@ -37,129 +43,165 @@ const TABS = [
 ]
 
 export default function App() {
-  const [tab,              setTab]              = useState('dashboard')
-  const [expenses,         setExpenses]         = useState([])
-  const [recurring,        setRecurring]        = useState([])
-  const [settings,         setSettings]         = useState(() => loadSettings())
-  const [categories,       setCategories]       = useState(() => loadCategories())
-  const [currencySettings, setCurrencySettings] = useState(() => loadCurrencySettings())
-  const [expenseModal,     setExpenseModal]     = useState(null)
-  const [mobileNav,        setMobileNav]        = useState(false)
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('dashboard')
+  const [expenses, setExpenses] = useState([])
+  const [recurring, setRecurring] = useState([])
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
+  const [currencySettings, setCurrencySettings] = useState(DEFAULT_CURRENCY_SETTINGS)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [mobileNav, setMobileNav] = useState(false)
 
-  // Apply theme to <html>
+  useEffect(() => {
+    async function checkUser() {
+      const currentUser = await getCurrentUser()
+      setUser(currentUser)
+      setLoading(false)
+    }
+    checkUser()
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+
+    async function loadData() {
+      try {
+        const { data: settingsData } = await loadSettings(user.id)
+        if (settingsData) setSettings(settingsData)
+
+        const { data: categoriesData } = await loadCategories(user.id)
+        if (categoriesData && categoriesData.length > 0) {
+          setCategories(categoriesData.map(c => ({ name: c.name, color: c.color })))
+        }
+
+        const { data: currencyData } = await loadCurrencySettings(user.id)
+        if (currencyData) setCurrencySettings({ display: currencyData.display_currency, rates: currencyData.rates })
+
+        const { data: recurringData } = await loadRecurring(user.id)
+        setRecurring(recurringData || [])
+
+        const { data: expensesData } = await loadExpenses(user.id)
+        const { result, changed } = applyRecurring(expensesData || [], recurringData || [])
+        setExpenses(result)
+      } catch (error) {
+        console.error('Error loading data:', error)
+      }
+    }
+
+    loadData()
+  }, [user])
+
   useEffect(() => {
     const html = document.documentElement
     if (settings.theme === 'dark') html.classList.add('dark')
     else html.classList.remove('dark')
   }, [settings.theme])
 
-  // Load data on mount
-  useEffect(() => {
-    const rec = loadRecurring()
-    const exp = loadExpenses()
-    const { result, changed } = applyRecurring(exp, rec)
-    setRecurring(rec)
-    setExpenses(result)
-    if (changed) saveExpenses(result)
-  }, [])
+  const handleLogout = async () => {
+    await signOut()
+    setUser(null)
+  }
 
-  // ── Settings ──────────────────────────────────────────────────────────
-  const handleSettingsSave = useCallback((s) => {
+  const handleSettingsSave = useCallback(async (s) => {
+    if (!user) return
     setSettings(s)
-    saveSettings(s)
-  }, [])
+    await saveSettings(s, user.id)
+  }, [user])
 
-  const handleCategoriesSave = useCallback((cats) => {
+  const handleCategoriesSave = useCallback(async (cats) => {
+    if (!user) return
     setCategories(cats)
-    saveCategories(cats)
-  }, [])
+    await saveCategories(cats, user.id)
+  }, [user])
 
-  const handleCurrencySave = useCallback((cs) => {
+  const handleCurrencySave = useCallback(async (cs) => {
+    if (!user) return
     setCurrencySettings(cs)
-    saveCurrencySettings(cs)
-  }, [])
+    await saveCurrencySettings(cs, user.id)
+  }, [user])
 
-  const handleThemeChange = useCallback((theme) => {
-    setSettings(prev => {
-      const next = { ...prev, theme }
-      saveSettings(next)
-      return next
-    })
-  }, [])
+  const handleThemeChange = useCallback(async (theme) => {
+    if (!user) return
+    const newSettings = { ...settings, theme }
+    setSettings(newSettings)
+    await saveSettings(newSettings, user.id)
+  }, [user, settings])
 
   function quickThemeToggle() {
     const next = settings.theme === 'dark' ? 'light' : 'dark'
     handleThemeChange(next)
   }
 
-  // ── Expense CRUD ──────────────────────────────────────────────────────
-  const handleExpenseSave = useCallback((saved) => {
+  const handleExpenseSave = useCallback(async (saved) => {
+    if (!user) return
     setExpenses(prev => {
-      let next
       const idx = prev.findIndex(e => e.id === saved.id)
-      if (idx >= 0) next = prev.map(e => e.id === saved.id ? { ...e, ...saved } : e)
-      else next = [...prev, saved]
-
-      if (saved.isRecurring && !saved.recurringId) {
-        const newRec = { id: genId('r'), name: saved.name, category: saved.category, amount: saved.amount, currency: saved.currency, billingDay: saved.billingDay ?? new Date().getDate(), notes: saved.notes ?? '', active: true, endDate: saved.endDate ?? null }
-        setRecurring(recs => { const u = [...recs, newRec]; saveRecurring(u); return u })
-        next = next.map(e => e.id === saved.id ? { ...e, recurringId: newRec.id } : e)
-      }
-      saveExpenses(next)
+      const next = idx >= 0 ? prev.map(e => e.id === saved.id ? { ...e, ...saved } : e) : [...prev, saved]
+      saveExpense(saved, user.id)
       return next
     })
     setExpenseModal(null)
-  }, [])
+  }, [user])
 
-  const handleExpenseDelete = useCallback((id) => {
-    setExpenses(prev => { const n = prev.filter(e => e.id !== id); saveExpenses(n); return n })
-  }, [])
+  const handleExpenseDelete = useCallback(async (id) => {
+    if (!user) return
+    setExpenses(prev => prev.filter(e => e.id !== id))
+    await deleteExpense(id)
+  }, [user])
 
-  // ── Recurring CRUD ────────────────────────────────────────────────────
-  const handleRecurringAdd = useCallback((item) => {
-    setRecurring(prev => {
-      const next = [...prev, item]
-      saveRecurring(next)
-      const ym = format(new Date(), 'yyyy-MM')
-      const dateStr = `${ym}-${String(item.billingDay).padStart(2,'0')}`
-      setExpenses(exps => {
-        if (exps.some(e => e.recurringId === item.id && e.date?.startsWith(ym))) return exps
-        const ne = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, date: dateStr, recurringId: item.id, notes: item.notes ?? '' }
-        const u = [...exps, ne]; saveExpenses(u); return u
-      })
-      return next
-    })
-  }, [])
+  const handleRecurringAdd = useCallback(async (item) => {
+    if (!user) return
+    const newItem = { ...item, user_id: user.id }
+    setRecurring(prev => [...prev, newItem])
+    await saveRecurring([...recurring, newItem], user.id)
+  }, [user, recurring])
 
-  const handleRecurringUpdate = useCallback((item) => {
-    setRecurring(prev => {
-      const next = prev.map(r => r.id === item.id ? item : r)
-      saveRecurring(next)
-      setExpenses(exps => {
-        const u = exps.map(e => e.recurringId !== item.id ? e : { ...e, name: item.name, category: item.category, amount: item.amount, currency: item.currency, notes: item.notes })
-        saveExpenses(u); return u
-      })
-      return next
-    })
-  }, [])
+  const handleRecurringUpdate = useCallback(async (item) => {
+    if (!user) return
+    const updated = recurring.map(r => r.id === item.id ? item : r)
+    setRecurring(updated)
+    await saveRecurring(updated, user.id)
+  }, [user, recurring])
 
-  const handleRecurringDelete = useCallback((id) => {
-    setRecurring(prev => { const n = prev.filter(r => r.id !== id); saveRecurring(n); return n })
-  }, [])
+  const handleRecurringDelete = useCallback(async (id) => {
+    if (!user) return
+    setRecurring(prev => prev.filter(r => r.id !== id))
+  }, [user])
 
-  const handleRecurringToggle = useCallback((id) => {
-    setRecurring(prev => { const n = prev.map(r => r.id === id ? { ...r, active: !r.active } : r); saveRecurring(n); return n })
-  }, [])
+  const handleRecurringToggle = useCallback(async (id) => {
+    if (!user) return
+    const updated = recurring.map(r => r.id === id ? { ...r, active: !r.active } : r)
+    setRecurring(updated)
+    await saveRecurring(updated, user.id)
+  }, [user, recurring])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white text-lg font-bold mx-auto mb-4"
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#6366f1)' }}>
+            CC
+          </div>
+          <p style={{ color: 'var(--text-3)' }}>Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Login onLoginSuccess={setUser} />
+  }
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
-      {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <aside
         className={`sidebar fixed inset-y-0 left-0 z-40 w-52 flex flex-col py-5 px-3 transition-transform duration-200
           ${mobileNav ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0`}
         style={{ borderRight: '1px solid var(--sb-border)' }}
       >
-        {/* Logo */}
         <div className="px-2 mb-6">
           <div className="flex items-center gap-2.5 mb-0.5">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
@@ -173,7 +215,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 space-y-0.5">
           {TABS.map(t => (
             <button
@@ -187,8 +228,7 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Bottom: theme toggle */}
-        <div className="px-2 pt-4" style={{ borderTop: '1px solid var(--sb-border)' }}>
+        <div className="px-2 pt-4 space-y-1" style={{ borderTop: '1px solid var(--sb-border)' }}>
           <button
             className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all text-xs font-medium"
             style={{ color: 'var(--sb-text)' }}
@@ -198,19 +238,22 @@ export default function App() {
               ? <><Sun size={14} /> Light mode</>
               : <><Moon size={14} /> Dark mode</>}
           </button>
+          <button
+            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all text-xs font-medium text-red-500 hover:bg-red-500/10"
+            onClick={handleLogout}
+          >
+            <LogOut size={14} /> Logout
+          </button>
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {mobileNav && (
         <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setMobileNav(false)} />
       )}
 
-      {/* ── Main ──────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="h-13 flex items-center justify-between px-5 lg:px-6 sticky top-0 z-20"
-          style={{ background: 'rgba(var(--surface-rgb,255,255,255),0.8)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+          style={{ background: 'var(--surface)' }}>
           <div className="flex items-center gap-3">
             <button className="lg:hidden p-2 rounded-lg transition-colors" style={{ color: 'var(--text-2)' }} onClick={() => setMobileNav(v => !v)}>
               {mobileNav ? <X size={18} /> : <Menu size={18} />}
@@ -222,16 +265,16 @@ export default function App() {
               <p className="text-xs hidden sm:block" style={{ color: 'var(--text-3)' }}>{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {(tab === 'dashboard' || tab === 'expenses') && (
               <button className="btn-primary text-xs" onClick={() => setExpenseModal('add')}>
                 + Add Expense
               </button>
             )}
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>{user?.email}</span>
           </div>
         </header>
 
-        {/* Content */}
         <main className="flex-1 p-5 lg:p-6 overflow-auto">
           {tab === 'dashboard' && <Dashboard expenses={expenses} recurring={recurring} categories={categories} currencySettings={currencySettings} />}
           {tab === 'expenses'  && <ExpensesTable expenses={expenses} onAdd={() => setExpenseModal('add')} onEdit={e => setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings} />}
