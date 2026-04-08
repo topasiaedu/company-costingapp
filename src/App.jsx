@@ -150,8 +150,16 @@ export default function App() {
   const handleExpenseSave = useCallback(async (saved) => {
     if (!user) return
 
-    // New recurring subscription: create the template
-    if (saved.isRecurring && !saved.recurringId) {
+    // Case 1: switched from recurring → one-off — remove the subscription template
+    if (!saved.isRecurring && saved.recurringId) {
+      const recId = saved.recurringId
+      saved = { ...saved, recurringId: null }
+      setRecurring(prev => prev.filter(r => r.id !== recId))
+      deleteRecurring(recId)
+    }
+
+    // Case 2: new recurring subscription — create the template
+    else if (saved.isRecurring && !saved.recurringId) {
       const newRecurring = {
         id:         genId('r'),
         name:       saved.name,
@@ -168,9 +176,8 @@ export default function App() {
       saveOneRecurring(newRecurring, user.id)
     }
 
-    // Editing an existing recurring expense → auto-sync the template so
-    // future auto-generated months use the updated name/amount/category
-    if (saved.recurringId) {
+    // Case 3: editing an existing recurring expense — auto-sync the template
+    else if (saved.isRecurring && saved.recurringId) {
       const template = recurring.find(r => r.id === saved.recurringId)
       if (template) {
         const updated = { ...template, name: saved.name, category: saved.category, amount: saved.amount, currency: saved.currency, notes: saved.notes || '' }
