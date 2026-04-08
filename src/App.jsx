@@ -39,10 +39,9 @@ function applyRecurring(expenses, recurring) {
 }
 
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard',  icon: LayoutDashboard },
-  { id: 'expenses',  label: 'Expenses',   icon: List },
-  { id: 'recurring', label: 'Recurring',  icon: RefreshCw },
-  { id: 'settings',  label: 'Settings',   icon: SettingsIcon },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'expenses',  label: 'Expenses',  icon: List },
+  { id: 'settings',  label: 'Settings',  icon: SettingsIcon },
 ]
 
 export default function App() {
@@ -55,8 +54,9 @@ export default function App() {
   const [settings,         setSettings]         = useState(DEFAULT_SETTINGS)
   const [categories,       setCategories]       = useState(DEFAULT_CATEGORIES)
   const [currencySettings, setCurrencySettings] = useState(DEFAULT_CURRENCY_SETTINGS)
-  const [expenseModal,     setExpenseModal]     = useState(null)
-  const [mobileNav,        setMobileNav]        = useState(false)
+  const [expenseModal,       setExpenseModal]       = useState(null)
+  const [mobileNav,          setMobileNav]          = useState(false)
+  const [showSubscriptions,  setShowSubscriptions]  = useState(false)
   const [saveStatus,       setSaveStatus]       = useState('idle')
   const [saveError,        setSaveError]        = useState('')
 
@@ -337,10 +337,9 @@ export default function App() {
 
         {/* Main content */}
         <main className="flex-1 p-5 lg:p-6 overflow-auto">
-          {tab==='dashboard' && <Dashboard       expenses={expenses} recurring={recurring} categories={categories} currencySettings={currencySettings}/>}
-          {tab==='expenses'  && <ExpensesTable   expenses={expenses} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings}/>}
-          {tab==='recurring' && <RecurringManager recurring={recurring} onAdd={handleRecurringAdd} onUpdate={handleRecurringUpdate} onDelete={handleRecurringDelete} onToggle={handleRecurringToggle} categories={categories} currencySettings={currencySettings}/>}
-          {tab==='settings'  && <Settings        settings={settings} onSave={handleSettingsSave} onThemeChange={handleThemeChange} categories={categories} onCategoriesSave={handleCategoriesSave} currencySettings={currencySettings} onCurrencySave={handleCurrencySave}/>}
+          {tab==='dashboard' && <Dashboard     expenses={expenses} recurring={recurring} categories={categories} currencySettings={currencySettings}/>}
+          {tab==='expenses'  && <ExpensesTable expenses={expenses} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings} onManageSubscriptions={()=>setShowSubscriptions(true)}/>}
+          {tab==='settings'  && <Settings      settings={settings} onSave={handleSettingsSave} onThemeChange={handleThemeChange} categories={categories} onCategoriesSave={handleCategoriesSave} currencySettings={currencySettings} onCurrencySave={handleCurrencySave}/>}
         </main>
       </div>
 
@@ -352,6 +351,33 @@ export default function App() {
           onSave={handleExpenseSave}
           onClose={() => setExpenseModal(null)}
         />
+      )}
+
+      {showSubscriptions && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSubscriptions(false)} />
+          <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-4 sticky top-0 z-10"
+              style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+              <h2 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Manage Subscriptions</h2>
+              <button className="btn-ghost p-1.5 rounded-lg" style={{ border: 'none' }} onClick={() => setShowSubscriptions(false)}>
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-4">
+              <RecurringManager
+                recurring={recurring}
+                onAdd={handleRecurringAdd}
+                onUpdate={handleRecurringUpdate}
+                onDelete={handleRecurringDelete}
+                onToggle={handleRecurringToggle}
+                categories={categories}
+                currencySettings={currencySettings}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

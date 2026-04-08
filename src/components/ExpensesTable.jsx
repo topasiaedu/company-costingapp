@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
-import { Search, Plus, Pencil, Trash2, RefreshCw, ChevronDown, CalendarDays, X, Download } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, RefreshCw, ChevronDown, CalendarDays, X, Download, Settings2 } from 'lucide-react'
 import { filterExpenses, getCategoryColor, exportToCSV, fmtCurrency } from '../data/store'
 
 const QUICK_RANGES = [
@@ -11,20 +11,25 @@ const QUICK_RANGES = [
   { label: 'All time',    getRange: () => ({ from:'', to:'' }) },
 ]
 
-export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categories, currencySettings }) {
+export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categories, currencySettings, onManageSubscriptions }) {
   const init = QUICK_RANGES[0].getRange()
-  const [dateFrom, setDateFrom] = useState(init.from)
-  const [dateTo,   setDateTo]   = useState(init.to)
-  const [search,    setSearch]   = useState('')
-  const [sortField, setSortField] = useState('date')
-  const [sortDir,   setSortDir]   = useState('desc')
+  const [dateFrom,        setDateFrom]        = useState(init.from)
+  const [dateTo,          setDateTo]          = useState(init.to)
+  const [search,          setSearch]          = useState('')
+  const [sortField,       setSortField]       = useState('date')
+  const [sortDir,         setSortDir]         = useState('desc')
+  const [filterCategory,  setFilterCategory]  = useState('All')
+  const [filterType,      setFilterType]      = useState('All')
 
   function applyRange(r) { const rng=r.getRange(); setDateFrom(rng.from); setDateTo(rng.to) }
   function isActive(r) { const rng=r.getRange(); return rng.from===dateFrom && rng.to===dateTo }
 
   const filtered = useMemo(() => {
     let list = filterExpenses(expenses, { dateFrom, dateTo })
-    if (search) { const q=search.toLowerCase(); list=list.filter(e => e.name.toLowerCase().includes(q)||e.category.toLowerCase().includes(q)) }
+    if (search)                    { const q=search.toLowerCase(); list=list.filter(e => e.name.toLowerCase().includes(q)||e.category.toLowerCase().includes(q)) }
+    if (filterCategory !== 'All')  { list = list.filter(e => e.category === filterCategory) }
+    if (filterType === 'Recurring'){ list = list.filter(e => e.recurringId || e.recurring_id) }
+    if (filterType === 'One-off')  { list = list.filter(e => !e.recurringId && !e.recurring_id) }
     return [...list].sort((a,b) => {
       let av=a[sortField]??'', bv=b[sortField]??''
       if (sortField==='amount') { av=+av; bv=+bv }
@@ -32,7 +37,7 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
       if (av>bv) return sortDir==='asc'?1:-1
       return 0
     })
-  }, [expenses, dateFrom, dateTo, search, sortField, sortDir])
+  }, [expenses, dateFrom, dateTo, search, sortField, sortDir, filterCategory, filterType])
 
   const total = useMemo(() => filtered.reduce((s,e) => s+e.amount, 0), [filtered])
 
@@ -73,6 +78,37 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
             <Download size={13} /> Export
           </button>
           <button className="btn-primary text-xs" onClick={onAdd}><Plus size={13} /> Add</button>
+        </div>
+
+        {/* Category + Type filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Category dropdown */}
+          <select className="input w-auto text-xs pr-6" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
+            <option value="All">All Categories</option>
+            {[...new Set(expenses.map(e=>e.category).filter(Boolean))].sort().map(c=>(
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          {/* Type pills */}
+          <div className="flex gap-1">
+            {['All','Recurring','One-off'].map(t=>(
+              <button key={t} className={`pill ${filterType===t?'active':''}`} onClick={()=>setFilterType(t)}>{t}</button>
+            ))}
+          </div>
+
+          {/* Reset filters */}
+          {(filterCategory!=='All'||filterType!=='All') && (
+            <button className="text-xs flex items-center gap-1" style={{color:'var(--text-3)'}}
+              onClick={()=>{setFilterCategory('All');setFilterType('All')}}>
+              <X size={11}/> Reset filters
+            </button>
+          )}
+
+          {/* Manage subscriptions */}
+          <button className="btn-ghost gap-1.5 text-xs ml-auto" onClick={onManageSubscriptions}>
+            <Settings2 size={13}/> Manage Subscriptions
+          </button>
         </div>
       </div>
 
