@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { format } from 'date-fns'
-import { LayoutDashboard, List, RefreshCw, Settings as SettingsIcon, Menu, X, Sun, Moon, LogOut } from 'lucide-react'
+import { LayoutDashboard, List, RefreshCw, Settings as SettingsIcon, Menu, X, Sun, Moon, LogOut, AlertCircle, Check } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ExpensesTable from './components/ExpensesTable'
 import ExpenseModal from './components/ExpenseModal'
@@ -25,12 +25,25 @@ function applyRecurring(expenses, recurring) {
   const ym = format(now, 'yyyy-MM')
   let changed = false
   const result = [...expenses]
+  
   for (const r of recurring) {
     if (!r.active) continue
     if (r.end_date && r.end_date < `${ym}-01`) continue
-    const dateStr = `${ym}-${String(r.billing_day).padStart(2,'0')}`
+    
+    const billingDay = r.billing_day || r.billingDay || 1
+    const dateStr = `${ym}-${String(billingDay).padStart(2,'0')}`
+    
     if (!result.some(e => e.recurring_id === r.id && e.date?.startsWith(ym))) {
-      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, recurring_id: r.id, notes: r.notes ?? '' })
+      result.push({ 
+        id: genId('e'), 
+        name: r.name, 
+        category: r.category, 
+        amount: r.amount, 
+        currency: r.currency, 
+        date: dateStr, 
+        recurring_id: r.id, 
+        notes: r.notes ?? '' 
+      })
       changed = true
     }
   }
@@ -47,7 +60,7 @@ const TABS = [
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [authScreen, setAuthScreen] = useState('login') // 'login', 'reset', 'reset-form'
+  const [authScreen, setAuthScreen] = useState('login')
   const [tab, setTab] = useState('dashboard')
   const [expenses, setExpenses] = useState([])
   const [recurring, setRecurring] = useState([])
@@ -56,11 +69,23 @@ export default function App() {
   const [currencySettings, setCurrencySettings] = useState(DEFAULT_CURRENCY_SETTINGS)
   const [expenseModal, setExpenseModal] = useState(null)
   const [mobileNav, setMobileNav] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('idle') // 'idle', 'saving', 'saved', 'error'
+  const [saveError, setSaveError] = useState('')
 
-  // Check user session on mount
+  // Auto-hide save status
+  useEffect(() => {
+    if (saveStatus === 'saved') {
+      const timer = setTimeout(() => setSaveStatus('idle'), 2000)
+      return () => clearTimeout(timer)
+    }
+    if (saveStatus === 'error') {
+      const timer = setTimeout(() => setSaveStatus('idle'), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [saveStatus])
+
   useEffect(() => {
     async function checkUser() {
-      // Check if we're on a reset password page
       const hash = window.location.hash
       if (hash.includes('type=recovery')) {
         setAuthScreen('reset-form')
@@ -73,12 +98,13 @@ export default function App() {
     checkUser()
   }, [])
 
-  // Load data when user logs in
   useEffect(() => {
     if (!user) return
 
     async function loadData() {
       try {
+        setSaveStatus('saving')
+        
         const { data: settingsData } = await loadSettings(user.id)
         if (settingsData) setSettings(settingsData)
 
@@ -96,15 +122,18 @@ export default function App() {
         const { data: expensesData } = await loadExpenses(user.id)
         const { result, changed } = applyRecurring(expensesData || [], recurringData || [])
         setExpenses(result)
+        
+        setSaveStatus('saved')
       } catch (error) {
         console.error('Error loading data:', error)
+        setSaveError('Failed to load data')
+        setSaveStatus('error')
       }
     }
 
     loadData()
   }, [user])
 
-  // Apply theme
   useEffect(() => {
     const html = document.documentElement
     if (settings.theme === 'dark') html.classList.add('dark')
@@ -118,27 +147,59 @@ export default function App() {
 
   const handleSettingsSave = useCallback(async (s) => {
     if (!user) return
-    setSettings(s)
-    await saveSettings(s, user.id)
+    try {
+      setSaveStatus('saving')
+      setSettings(s)
+      const { error } = await saveSettings(s, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save settings')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleCategoriesSave = useCallback(async (cats) => {
     if (!user) return
-    setCategories(cats)
-    await saveCategories(cats, user.id)
+    try {
+      setSaveStatus('saving')
+      setCategories(cats)
+      const { error } = await saveCategories(cats, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save categories')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleCurrencySave = useCallback(async (cs) => {
     if (!user) return
-    setCurrencySettings(cs)
-    await saveCurrencySettings(cs, user.id)
+    try {
+      setSaveStatus('saving')
+      setCurrencySettings(cs)
+      const { error } = await saveCurrencySettings(cs, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save currency settings')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleThemeChange = useCallback(async (theme) => {
     if (!user) return
-    const newSettings = { ...settings, theme }
-    setSettings(newSettings)
-    await saveSettings(newSettings, user.id)
+    try {
+      setSaveStatus('saving')
+      const newSettings = { ...settings, theme }
+      setSettings(newSettings)
+      const { error } = await saveSettings(newSettings, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save theme')
+      setSaveStatus('error')
+    }
   }, [user, settings])
 
   function quickThemeToggle() {
@@ -148,48 +209,115 @@ export default function App() {
 
   const handleExpenseSave = useCallback(async (saved) => {
     if (!user) return
-    setExpenses(prev => {
-      const idx = prev.findIndex(e => e.id === saved.id)
-      const next = idx >= 0 ? prev.map(e => e.id === saved.id ? { ...e, ...saved } : e) : [...prev, saved]
-      saveExpense(saved, user.id)
-      return next
-    })
-    setExpenseModal(null)
+    try {
+      setSaveStatus('saving')
+      setExpenses(prev => {
+        const idx = prev.findIndex(e => e.id === saved.id)
+        const next = idx >= 0 ? prev.map(e => e.id === saved.id ? { ...e, ...saved } : e) : [...prev, saved]
+        return next
+      })
+      const { error } = await saveExpense(saved, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+      setExpenseModal(null)
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save expense')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleExpenseDelete = useCallback(async (id) => {
     if (!user) return
-    setExpenses(prev => prev.filter(e => e.id !== id))
-    await deleteExpense(id)
+    try {
+      setSaveStatus('saving')
+      setExpenses(prev => prev.filter(e => e.id !== id))
+      const { error } = await deleteExpense(id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to delete expense')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleRecurringAdd = useCallback(async (item) => {
     if (!user) return
-    const newItem = { ...item, user_id: user.id }
-    setRecurring(prev => [...prev, newItem])
-    await saveRecurring([...recurring, newItem], user.id)
+    try {
+      setSaveStatus('saving')
+      const newItem = { ...item, user_id: user.id }
+      setRecurring(prev => [...prev, newItem])
+      const { error } = await saveRecurring([...recurring, newItem], user.id)
+      if (error) throw error
+      
+      // Auto-generate expense for this month
+      const now = new Date()
+      const ym = format(now, 'yyyy-MM')
+      const billingDay = item.billing_day || item.billingDay || 1
+      const dateStr = `${ym}-${String(billingDay).padStart(2,'0')}`
+      const newExpense = {
+        id: genId('e'),
+        name: item.name,
+        category: item.category,
+        amount: item.amount,
+        currency: item.currency,
+        date: dateStr,
+        recurring_id: item.id,
+        notes: item.notes ?? ''
+      }
+      setExpenses(prev => [...prev, newExpense])
+      await saveExpense(newExpense, user.id)
+      
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to add recurring item')
+      setSaveStatus('error')
+    }
   }, [user, recurring])
 
   const handleRecurringUpdate = useCallback(async (item) => {
     if (!user) return
-    const updated = recurring.map(r => r.id === item.id ? item : r)
-    setRecurring(updated)
-    await saveRecurring(updated, user.id)
+    try {
+      setSaveStatus('saving')
+      const updated = recurring.map(r => r.id === item.id ? item : r)
+      setRecurring(updated)
+      const { error } = await saveRecurring(updated, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to update recurring item')
+      setSaveStatus('error')
+    }
   }, [user, recurring])
 
   const handleRecurringDelete = useCallback(async (id) => {
     if (!user) return
-    setRecurring(prev => prev.filter(r => r.id !== id))
+    try {
+      setSaveStatus('saving')
+      setRecurring(prev => prev.filter(r => r.id !== id))
+      const { error } = await deleteRecurring(id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to delete recurring item')
+      setSaveStatus('error')
+    }
   }, [user])
 
   const handleRecurringToggle = useCallback(async (id) => {
     if (!user) return
-    const updated = recurring.map(r => r.id === id ? { ...r, active: !r.active } : r)
-    setRecurring(updated)
-    await saveRecurring(updated, user.id)
+    try {
+      setSaveStatus('saving')
+      const updated = recurring.map(r => r.id === id ? { ...r, active: !r.active } : r)
+      setRecurring(updated)
+      const { error } = await saveRecurring(updated, user.id)
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      setSaveError(err.message || 'Failed to toggle recurring item')
+      setSaveStatus('error')
+    }
   }, [user, recurring])
 
-  // Loading screen
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
@@ -204,22 +332,18 @@ export default function App() {
     )
   }
 
-  // Reset password form screen
   if (authScreen === 'reset-form') {
     return <ResetPasswordForm onSuccess={() => setAuthScreen('login')} />
   }
 
-  // Reset password request screen
   if (authScreen === 'reset') {
     return <ResetPassword onBack={() => setAuthScreen('login')} />
   }
 
-  // Login screen
   if (!user) {
     return <Login onLoginSuccess={setUser} onForgotPassword={() => setAuthScreen('reset')} />
   }
 
-  // Main app
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
       <aside
@@ -278,7 +402,7 @@ export default function App() {
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-13 flex items-center justify-between px-5 lg:px-6 sticky top-0 z-20"
-          style={{ background: 'var(--surface)' }}>
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             <button className="lg:hidden p-2 rounded-lg transition-colors" style={{ color: 'var(--text-2)' }} onClick={() => setMobileNav(v => !v)}>
               {mobileNav ? <X size={18} /> : <Menu size={18} />}
@@ -296,6 +420,37 @@ export default function App() {
                 + Add Expense
               </button>
             )}
+            
+            {/* SAVE STATUS - BIG & OBVIOUS */}
+            <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{
+                background: saveStatus === 'saving' ? 'rgba(59,130,246,0.1)' : 
+                           saveStatus === 'saved' ? 'rgba(34,197,94,0.1)' :
+                           saveStatus === 'error' ? 'rgba(239,68,68,0.1)' : 'transparent',
+                color: saveStatus === 'saving' ? '#3b82f6' : 
+                       saveStatus === 'saved' ? '#22c55e' :
+                       saveStatus === 'error' ? '#ef4444' : 'var(--text-3)'
+              }}>
+              {saveStatus === 'saving' && (
+                <>
+                  <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              )}
+              {saveStatus === 'saved' && (
+                <>
+                  <Check size={14} />
+                  <span>All changes saved</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <AlertCircle size={14} />
+                  <span>{saveError || 'Save failed - try again'}</span>
+                </>
+              )}
+            </div>
+            
             <span className="text-xs" style={{ color: 'var(--text-3)' }}>{user?.email}</span>
           </div>
         </header>
