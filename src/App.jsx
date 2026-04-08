@@ -186,7 +186,7 @@ export default function App() {
     else if (saved.isRecurring && saved.recurringId) {
       const template = recurring.find(r => r.id === saved.recurringId)
       if (template) {
-        const updated = { ...template, name: saved.name, category: saved.category, amount: saved.amount, currency: saved.currency, notes: saved.notes || '' }
+        const updated = { ...template, name: saved.name, category: saved.category, amount: saved.amount, currency: saved.currency, notes: saved.notes || '', frequency: saved.frequency || 'monthly', billingDay: saved.billingDay || template.billingDay, billingMonth: saved.billingMonth || template.billingMonth }
         setRecurring(prev => prev.map(r => r.id === saved.recurringId ? updated : r))
         saveOneRecurring(updated, user.id)
       }
