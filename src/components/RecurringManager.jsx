@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Plus, Pencil, Trash2, RefreshCw, X, Power, Info, Infinity, Calendar } from 'lucide-react'
 import { CURRENCIES, genId, getCategoryColor, guessCategory, fmtCurrency } from '../data/store'
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
 function RecurringModal({ item, onSave, onClose, categories = [] }) {
   const isEdit = !!item
   const [form, setForm] = useState(item
-    ? { ...item, hasEndDate: !!item.endDate, endDate: item.endDate ?? '' }
-    : { name:'', category:'', amount:'', currency:'USD', billingDay:1, notes:'', active:true, hasEndDate:false, endDate:'' }
+    ? { ...item, hasEndDate: !!item.endDate, endDate: item.endDate ?? '', frequency: item.frequency || 'monthly', billingMonth: item.billingMonth || new Date().getMonth() + 1 }
+    : { name:'', category:'', amount:'', currency:'USD', billingDay:1, billingMonth: new Date().getMonth() + 1, frequency:'monthly', notes:'', active:true, hasEndDate:false, endDate:'' }
   )
   const [autoCategory, setAutoCategory] = useState(null)
 
@@ -20,7 +22,7 @@ function RecurringModal({ item, onSave, onClose, categories = [] }) {
   function handleSubmit(e) {
     e.preventDefault()
     if (!form.name.trim() || !form.amount) return
-    onSave({ ...form, id: item?.id ?? genId('r'), amount: parseFloat(form.amount), category: form.category || 'Other', endDate: (form.hasEndDate && form.endDate) ? form.endDate : null })
+    onSave({ ...form, id: item?.id ?? genId('r'), amount: parseFloat(form.amount), category: form.category || 'Other', endDate: (form.hasEndDate && form.endDate) ? form.endDate : null, frequency: form.frequency, billingMonth: form.frequency === 'yearly' ? parseInt(form.billingMonth) : 1 })
   }
 
   return (
@@ -65,8 +67,25 @@ function RecurringModal({ item, onSave, onClose, categories = [] }) {
               <input className="input" type="number" min="0" step="0.01" placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required />
             </div>
             <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color:'var(--text-2)' }}>Frequency</label>
+              <select className="input" value={form.frequency} onChange={e => set('frequency', e.target.value)}>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+          </div>
+          <div className={`grid gap-3 ${form.frequency === 'yearly' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {form.frequency === 'yearly' && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color:'var(--text-2)' }}>Billing month</label>
+                <select className="input" value={form.billingMonth} onChange={e => set('billingMonth', +e.target.value)}>
+                  {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color:'var(--text-2)' }}>
-                Charge on day
+                {form.frequency === 'yearly' ? 'Billing day' : 'Charge on day'}
               </label>
               <input className="input" type="number" min="1" max="31" value={form.billingDay} onChange={e => set('billingDay', +e.target.value)} />
             </div>
@@ -130,13 +149,16 @@ function RecurringRow({ item, onEdit, onDelete, onToggle, categories }) {
           {!item.endDate && <span className="badge" style={{ background:'var(--accent-dim)', color:'var(--accent)' }}>∞ Infinite</span>}
         </div>
         <p className="text-xs mt-0.5 truncate" style={{ color:'var(--text-3)' }}>
-          {item.category} · Day {item.billingDay} · {item.endDate ? `Ends ${item.endDate}` : 'No end date'}
+          {item.category} · {item.frequency === 'yearly'
+            ? `${MONTHS[(item.billingMonth || 1) - 1]} ${item.billingDay}`
+            : `Day ${item.billingDay}`
+          } · {item.endDate ? `Ends ${item.endDate}` : 'No end date'}
           {item.notes ? ` · ${item.notes}` : ''}
         </p>
       </div>
       <div className="text-right flex-shrink-0">
         <p className="text-sm font-bold" style={{ color:'var(--text-1)' }}>{fmtCurrency(item.amount, item.currency)}</p>
-        <p className="text-xs" style={{ color:'var(--text-3)' }}>/mo</p>
+        <p className="text-xs" style={{ color:'var(--text-3)' }}>{item.frequency === 'yearly' ? '/yr' : '/mo'}</p>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button className="p-1.5 rounded-lg transition-colors" title={item.active ? 'Pause' : 'Activate'}
@@ -157,7 +179,10 @@ export default function RecurringManager({ recurring, onAdd, onUpdate, onDelete,
   const [modal, setModal] = useState(null)
   const active   = recurring.filter(r => r.active)
   const inactive = recurring.filter(r => !r.active)
-  const monthlyTotal = active.reduce((s,r) => s+r.amount, 0)
+  const monthlyActive = active.filter(r => (r.frequency || 'monthly') === 'monthly')
+  const yearlyActive  = active.filter(r => r.frequency === 'yearly')
+  const monthlyTotal  = monthlyActive.reduce((s,r) => s+r.amount, 0)
+  const yearlyTotal   = yearlyActive.reduce((s,r) => s+r.amount, 0)
 
   function handleSave(item) { if (modal === 'add') onAdd(item); else onUpdate(item); setModal(null) }
 
@@ -168,20 +193,21 @@ export default function RecurringManager({ recurring, onAdd, onUpdate, onDelete,
         <Info size={14} style={{ color:'var(--accent)', flexShrink:0, marginTop:2 }} />
         <p className="text-xs leading-relaxed" style={{ color:'var(--text-2)' }}>
           <span className="font-semibold" style={{ color:'var(--text-1)' }}>How it works: </span>
-          Every time you open the app, it auto-creates this month's entry for each active subscription. Edit a recurring item → all linked expenses update. Pause → stops new entries but keeps history. Set an end date to stop a subscription at a specific month.
+          Monthly items auto-generate an expense every month. Yearly items auto-generate once a year in their billing month. Edit a recurring item → all linked expenses update. Pause → stops new entries but keeps history.
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label:'Monthly Total', value:`$${monthlyTotal.toFixed(2)}`, color:'var(--accent)' },
-          { label:'Active',        value:active.length,                  color:'#22c55e' },
-          { label:'Paused',        value:inactive.length,                color:'var(--text-3)' },
+          { label:'Monthly Cost', value:`$${monthlyTotal.toFixed(2)}`, sub:'/mo', color:'var(--accent)' },
+          { label:'Yearly Cost',  value:`$${yearlyTotal.toFixed(2)}`,  sub:'/yr', color:'#f59e0b' },
+          { label:'Active',       value:active.length,                 sub:'subscriptions', color:'#22c55e' },
         ].map(s => (
           <div key={s.label} className="card text-center">
             <p className="section-label mb-2">{s.label}</p>
             <p className="text-2xl font-bold" style={{ color:s.color }}>{s.value}</p>
+            <p className="text-xs mt-0.5" style={{ color:'var(--text-3)' }}>{s.sub}</p>
           </div>
         ))}
       </div>

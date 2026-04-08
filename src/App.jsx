@@ -21,13 +21,17 @@ import {
 
 // Auto-generate this month's expenses for active recurring items
 function applyRecurring(expenses, recurring) {
-  const now  = new Date()
-  const ym   = format(now, 'yyyy-MM')
+  const now          = new Date()
+  const ym           = format(now, 'yyyy-MM')
+  const currentMonth = now.getMonth() + 1  // 1-12
   let changed = false
   const result = [...expenses]
   for (const r of recurring) {
     if (!r.active) continue
     if (r.endDate && r.endDate < `${ym}-01`) continue
+    const freq = r.frequency || 'monthly'
+    // Yearly items only generate in their billing month
+    if (freq === 'yearly' && (r.billingMonth || 1) !== currentMonth) continue
     const day     = String(r.billingDay || 1).padStart(2, '0')
     const dateStr = `${ym}-${day}`
     if (!result.some(e => e.recurringId === r.id && e.date?.startsWith(ym))) {
@@ -161,15 +165,17 @@ export default function App() {
     // Case 2: new recurring subscription — create the template
     else if (saved.isRecurring && !saved.recurringId) {
       const newRecurring = {
-        id:         genId('r'),
-        name:       saved.name,
-        category:   saved.category,
-        amount:     saved.amount,
-        currency:   saved.currency,
-        billingDay: saved.billingDay || new Date().getDate(),
-        active:     true,
-        notes:      saved.notes || '',
-        endDate:    saved.endDate || null,
+        id:           genId('r'),
+        name:         saved.name,
+        category:     saved.category,
+        amount:       saved.amount,
+        currency:     saved.currency,
+        billingDay:   saved.billingDay || new Date().getDate(),
+        billingMonth: saved.billingMonth || new Date().getMonth() + 1,
+        frequency:    saved.frequency || 'monthly',
+        active:       true,
+        notes:        saved.notes || '',
+        endDate:      saved.endDate || null,
       }
       saved = { ...saved, recurringId: newRecurring.id }
       setRecurring(prev => [...prev, newRecurring])
@@ -224,15 +230,22 @@ export default function App() {
   const handleRecurringAdd = useCallback(async (item) => {
     if (!user) return
     setRecurring(prev => [...prev, item])
-    // Also auto-generate this month's expense
-    const ym      = format(new Date(), 'yyyy-MM')
-    const day     = String(item.billingDay || 1).padStart(2, '0')
-    const newExp  = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, date: `${ym}-${day}`, recurringId: item.id, notes: item.notes ?? '' }
-    setExpenses(prev => [...prev, newExp])
+    // Auto-generate this month's expense only if applicable
+    const freq         = item.frequency || 'monthly'
+    const currentMonth = new Date().getMonth() + 1
+    const shouldGenerate = freq === 'monthly' || (freq === 'yearly' && (item.billingMonth || 1) === currentMonth)
+    let newExp = null
+    if (shouldGenerate) {
+      const ym  = format(new Date(), 'yyyy-MM')
+      const day = String(item.billingDay || 1).padStart(2, '0')
+      newExp = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, date: `${ym}-${day}`, recurringId: item.id, notes: item.notes ?? '' }
+      setExpenses(prev => [...prev, newExp])
+    }
     doSave(async () => {
       const r1 = await saveOneRecurring(item, user.id)
       if (r1.error) return r1
-      return saveExpense(newExp, user.id)
+      if (newExp) return saveExpense(newExp, user.id)
+      return { error: null }
     })
   }, [user, doSave])
 

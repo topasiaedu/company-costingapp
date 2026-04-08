@@ -25,30 +25,34 @@ export async function getCurrentUser() {
 // ── Helpers: DB (snake_case) <-> App (camelCase) ────────────────────
 function recurringFromDB(r) {
   return {
-    id:         r.id,
-    name:       r.name,
-    category:   r.category,
-    amount:     Number(r.amount),
-    currency:   r.currency,
-    billingDay: r.billing_day,   // ← DB uses billing_day
-    active:     r.active,
-    notes:      r.notes || '',
-    endDate:    r.end_date,      // ← DB uses end_date
+    id:           r.id,
+    name:         r.name,
+    category:     r.category,
+    amount:       Number(r.amount),
+    currency:     r.currency,
+    billingDay:   r.billing_day,
+    billingMonth: r.billing_month || 1,
+    frequency:    r.frequency || 'monthly',
+    active:       r.active,
+    notes:        r.notes || '',
+    endDate:      r.end_date,
   }
 }
 
 function recurringToDB(r, userId) {
   return {
-    id:          r.id,
-    user_id:     userId,
-    name:        r.name,
-    category:    r.category,
-    amount:      Number(r.amount),
-    currency:    r.currency,
-    billing_day: r.billingDay,   // ← App uses billingDay
-    active:      r.active,
-    notes:       r.notes || '',
-    end_date:    r.endDate || null,  // ← App uses endDate
+    id:            r.id,
+    user_id:       userId,
+    name:          r.name,
+    category:      r.category,
+    amount:        Number(r.amount),
+    currency:      r.currency,
+    billing_day:   r.billingDay,
+    billing_month: r.billingMonth || 1,
+    frequency:     r.frequency || 'monthly',
+    active:        r.active,
+    notes:         r.notes || '',
+    end_date:      r.endDate || null,
   }
 }
 

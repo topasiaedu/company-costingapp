@@ -3,10 +3,13 @@ import { X, RefreshCw, Sparkles, Infinity, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 import { CURRENCIES, genId, guessCategory } from '../data/store'
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+
 const makeEmpty = (defaultCurrency = 'USD') => ({
   name: '', category: '', amount: '', currency: defaultCurrency,
   date: format(new Date(), 'yyyy-MM-dd'), notes: '',
-  isRecurring: false, billingDay: new Date().getDate(),
+  isRecurring: false, frequency: 'monthly', billingDay: new Date().getDate(),
+  billingMonth: new Date().getMonth() + 1,
   hasEndDate: false, endDate: '',
 })
 
@@ -25,7 +28,9 @@ export default function ExpenseModal({ expense, defaultCurrency = 'USD', categor
         date: expense.date,
         notes: expense.notes ?? '',
         isRecurring: !!(expense.recurringId || expense.recurring_id),
+        frequency: expense.frequency || 'monthly',
         billingDay: expense.billingDay ?? (expense.date ? +expense.date.split('-')[2] : 1),
+        billingMonth: expense.billingMonth || new Date().getMonth() + 1,
         hasEndDate: !!expense.endDate,
         endDate: expense.endDate ?? '',
       })
@@ -58,7 +63,9 @@ export default function ExpenseModal({ expense, defaultCurrency = 'USD', categor
       id: expense?.id ?? genId('e'),
       recurringId: expense?.recurringId || expense?.recurring_id || null,
       isRecurring: form.isRecurring,
+      frequency: form.isRecurring ? (form.frequency || 'monthly') : null,
       billingDay: form.isRecurring ? +form.billingDay : null,
+      billingMonth: (form.isRecurring && form.frequency === 'yearly') ? +form.billingMonth : null,
       endDate: (form.isRecurring && form.hasEndDate && form.endDate) ? form.endDate : null,
     })
   }
@@ -148,24 +155,59 @@ export default function ExpenseModal({ expense, defaultCurrency = 'USD', categor
               <div className={`toggle ${form.isRecurring ? 'on' : ''}`}><div className="toggle-thumb" /></div>
               <span className="text-sm font-medium flex items-center gap-1.5" style={{ color: 'var(--text-1)' }}>
                 <RefreshCw size={13} style={{ color: form.isRecurring ? 'var(--accent)' : 'var(--text-3)' }} />
-                Recurring monthly
+                Recurring
               </span>
             </div>
 
             {form.isRecurring && (
               <div className="space-y-4 pt-1">
-                {/* Billing day — always shown, always needed */}
+                {/* Frequency toggle */}
                 <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
-                    Charge on day <span style={{ color: 'var(--accent)' }}>{form.billingDay}</span> of each month
-                  </label>
-                  <input
-                    className="input w-24" type="number" min="1" max="31"
-                    value={form.billingDay} onChange={e => set('billingDay', e.target.value)}
-                  />
+                  <label className="block text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Frequency</label>
+                  <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <button type="button"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all"
+                      style={form.frequency !== 'yearly'
+                        ? { background: 'linear-gradient(135deg,#7c3aed,#6366f1)', color: 'white' }
+                        : { background: 'transparent', color: 'var(--text-2)' }}
+                      onClick={() => set('frequency', 'monthly')}>
+                      <RefreshCw size={11} /> Monthly
+                    </button>
+                    <button type="button"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all"
+                      style={form.frequency === 'yearly'
+                        ? { background: 'linear-gradient(135deg,#7c3aed,#6366f1)', color: 'white' }
+                        : { background: 'transparent', color: 'var(--text-2)' }}
+                      onClick={() => set('frequency', 'yearly')}>
+                      <Calendar size={11} /> Yearly
+                    </button>
+                  </div>
                 </div>
 
-                {/* Duration — clean two-option toggle */}
+                {/* Billing day/month */}
+                <div className={`grid gap-3 ${form.frequency === 'yearly' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {form.frequency === 'yearly' && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>Billing month</label>
+                      <select className="input" value={form.billingMonth} onChange={e => set('billingMonth', +e.target.value)}>
+                        {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>
+                      {form.frequency === 'yearly'
+                        ? 'Billing day'
+                        : <>Charge on day <span style={{ color: 'var(--accent)' }}>{form.billingDay}</span> of each month</>}
+                    </label>
+                    <input
+                      className="input w-24" type="number" min="1" max="31"
+                      value={form.billingDay} onChange={e => set('billingDay', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Duration */}
                 <div>
                   <label className="block text-xs font-medium mb-2" style={{ color: 'var(--text-2)' }}>Duration</label>
                   <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
@@ -201,7 +243,9 @@ export default function ExpenseModal({ expense, defaultCurrency = 'USD', categor
                   <p className="text-xs mt-1.5" style={{ color: 'var(--text-3)' }}>
                     {form.hasEndDate
                       ? (form.endDate ? `Stops after ${form.endDate}` : 'Pick an end date above')
-                      : 'Runs every month with no end — change anytime'}
+                      : form.frequency === 'yearly'
+                        ? 'Runs every year with no end — change anytime'
+                        : 'Runs every month with no end — change anytime'}
                   </p>
                 </div>
               </div>
