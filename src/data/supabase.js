@@ -52,6 +52,20 @@ function recurringToDB(r, userId) {
   }
 }
 
+// ── Helpers: DB (snake_case) <-> App (camelCase) for Expenses ───────
+function expenseFromDB(e) {
+  return {
+    id:          e.id,
+    name:        e.name,
+    category:    e.category,
+    amount:      Number(e.amount),
+    currency:    e.currency,
+    date:        e.date,
+    recurringId: e.recurring_id || null,   // ← normalize to camelCase
+    notes:       e.notes || '',
+  }
+}
+
 // ── Expenses ────────────────────────────────────────────────────────
 export async function loadExpenses(userId) {
   const { data, error } = await supabase
@@ -60,7 +74,7 @@ export async function loadExpenses(userId) {
     .eq('user_id', userId)
     .order('date', { ascending: false })
   if (error) console.error('loadExpenses:', error)
-  return { data: data || [], error }
+  return { data: (data || []).map(expenseFromDB), error }
 }
 
 export async function saveExpense(expense, userId) {
@@ -72,7 +86,7 @@ export async function saveExpense(expense, userId) {
     amount:       Number(expense.amount),
     currency:     expense.currency,
     date:         expense.date,
-    recurring_id: expense.recurring_id || expense.recurringId || null,
+    recurring_id: expense.recurringId || expense.recurring_id || null,  // ← accept either
     notes:        expense.notes || '',
   }
   const { data, error } = await supabase.from('expenses').upsert([row], { onConflict: 'id' })

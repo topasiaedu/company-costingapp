@@ -108,7 +108,7 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
                     {fmtCurrency(e.amount, e.currency)}
                   </td>
                   <td>
-                    {e.recurringId
+                    {e.recurringId || e.recurring_id
                       ? <span className="badge" style={{ background:'var(--accent-dim)', color:'var(--accent)' }}><RefreshCw size={9}/> Recurring</span>
                       : <span className="badge" style={{ background:'var(--surface-2)', color:'var(--text-3)' }}>One-off</span>}
                   </td>

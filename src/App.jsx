@@ -30,8 +30,8 @@ function applyRecurring(expenses, recurring) {
     if (r.endDate && r.endDate < `${ym}-01`) continue
     const day     = String(r.billingDay || 1).padStart(2, '0')
     const dateStr = `${ym}-${day}`
-    if (!result.some(e => (e.recurring_id || e.recurringId) === r.id && e.date?.startsWith(ym))) {
-      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, recurring_id: r.id, notes: r.notes ?? '' })
+    if (!result.some(e => e.recurringId === r.id && e.date?.startsWith(ym))) {
+      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, recurringId: r.id, notes: r.notes ?? '' })
       changed = true
     }
   }
@@ -196,7 +196,7 @@ export default function App() {
     // Also auto-generate this month's expense
     const ym      = format(new Date(), 'yyyy-MM')
     const day     = String(item.billingDay || 1).padStart(2, '0')
-    const newExp  = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, date: `${ym}-${day}`, recurring_id: item.id, notes: item.notes ?? '' }
+    const newExp  = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, date: `${ym}-${day}`, recurringId: item.id, notes: item.notes ?? '' }
     setExpenses(prev => [...prev, newExp])
     doSave(async () => {
       const r1 = await saveOneRecurring(item, user.id)
