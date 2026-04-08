@@ -150,6 +150,31 @@ export default function App() {
   // ── Expenses ────────────────────────────────────────────────────
   const handleExpenseSave = useCallback(async (saved) => {
     if (!user) return
+
+    // If user toggled "Recurring monthly" ON and it's not yet linked to a recurring item
+    if (saved.isRecurring && !saved.recurringId) {
+      // Create a new recurring item from this expense
+      const newRecurring = {
+        id:         genId('r'),
+        name:       saved.name,
+        category:   saved.category,
+        amount:     saved.amount,
+        currency:   saved.currency,
+        billingDay: saved.billingDay || new Date().getDate(),
+        active:     true,
+        notes:      saved.notes || '',
+        endDate:    saved.endDate || null,
+      }
+      // Link the expense to the new recurring item
+      saved = { ...saved, recurringId: newRecurring.id, recurring_id: newRecurring.id }
+
+      // Add to recurring state immediately so Recurring tab shows it
+      setRecurring(prev => [...prev, newRecurring])
+      // Save recurring item to DB
+      saveOneRecurring(newRecurring, user.id)
+    }
+
+    // Update expenses state
     setExpenses(prev => {
       const idx = prev.findIndex(e => e.id === saved.id)
       return idx >= 0 ? prev.map(e => e.id === saved.id ? { ...e, ...saved } : e) : [...prev, saved]
