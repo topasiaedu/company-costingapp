@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Save, Sun, Moon, Palette, Building2, RotateCcw, Plus, Trash2, GripVertical, DollarSign, Info } from 'lucide-react'
-import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES, CURRENCIES, fmtCurrency } from '../data/store'
+import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES, CURRENCIES, fmtCurrency, genId } from '../data/store'
 
 // ── Category Manager ───────────────────────────────────────────────────────
 function CategoryManager({ categories, onSave }) {
@@ -12,7 +12,7 @@ function CategoryManager({ categories, onSave }) {
   function addCat() {
     if (!newName.trim()) return
     if (cats.find(c => c.name.toLowerCase() === newName.trim().toLowerCase())) return
-    setCats(prev => [...prev, { name: newName.trim(), color: newColor }])
+    setCats(prev => [...prev, { id: genId('cat'), name: newName.trim(), color: newColor }])
     setNewName(''); setNewColor('#6366f1')
   }
 
@@ -36,8 +36,9 @@ function CategoryManager({ categories, onSave }) {
   }
 
   function handleReset() {
-    setCats([...DEFAULT_CATEGORIES])
-    onSave([...DEFAULT_CATEGORIES])
+    const withIds = DEFAULT_CATEGORIES.map(c => ({ id: genId('cat'), name: c.name, color: c.color }))
+    setCats(withIds)
+    onSave(withIds)
   }
 
   return (

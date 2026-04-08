@@ -97,7 +97,7 @@ export default function App() {
         ])
 
         if (settingsRes.data)  setSettings(settingsRes.data)
-        if (catsRes.data?.length > 0) setCategories(catsRes.data.map(c => ({ name: c.name, color: c.color })))
+        if (catsRes.data?.length > 0) setCategories(catsRes.data.map(c => ({ id: c.id, name: c.name, color: c.color })))
         if (currencyRes.data)  setCurrencySettings({ display: currencyRes.data.display_currency, rates: currencyRes.data.rates })
 
         const loadedRecurring = recurringRes.data || []
