@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { dbToAppRecurring, appToDbRecurring } from './recurringHelpers'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jufozzefpxiqbpeajhiy.supabase.co'
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_RpBO5Cc2VZn2khReUEQULQ_LyxFxJz6'
@@ -43,7 +44,6 @@ export async function loadExpenses(userId) {
 }
 
 export async function saveExpense(expense, userId) {
-  // Transform camelCase to snake_case for database
   const expenseData = {
     id: expense.id,
     user_id: userId,
@@ -93,23 +93,14 @@ export async function loadRecurring(userId) {
     return { data: [], error }
   }
   
-  return { data: data || [], error }
+  // Transform from DB format to app format
+  const transformed = (data || []).map(dbToAppRecurring)
+  return { data: transformed, error }
 }
 
 export async function saveRecurring(recurring, userId) {
-  const recurringData = recurring.map(r => ({
-    id: r.id,
-    user_id: userId,
-    name: r.name,
-    category: r.category,
-    amount: parseFloat(r.amount || 0),
-    currency: r.currency,
-    billing_day: r.billing_day || r.billingDay || 1,
-    active: r.active !== false,
-    notes: r.notes || '',
-    end_date: r.end_date || r.endDate || null,
-    created_at: new Date().toISOString()
-  }))
+  // Transform from app format to DB format
+  const recurringData = recurring.map(r => appToDbRecurring(r, userId))
 
   const { data, error } = await supabase
     .from('recurring')
