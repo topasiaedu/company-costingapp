@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://jufozzefpxiqbpeajhiy.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_RpBO5Cc2VZn2khReUEQULQ_LyxFxJz6'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jufozzefpxiqbpeajhiy.supabase.co'
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_RpBO5Cc2VZn2khReUEQULQ_LyxFxJz6'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -33,19 +33,51 @@ export async function loadExpenses(userId) {
     .select('*')
     .eq('user_id', userId)
     .order('date', { ascending: false })
+  
+  if (error) {
+    console.error('Load expenses error:', error)
+    return { data: [], error }
+  }
+  
   return { data: data || [], error }
 }
 
 export async function saveExpense(expense, userId) {
-  const expenseData = { ...expense, user_id: userId, amount: parseFloat(expense.amount) }
+  // Transform camelCase to snake_case for database
+  const expenseData = {
+    id: expense.id,
+    user_id: userId,
+    name: expense.name,
+    category: expense.category,
+    amount: parseFloat(expense.amount || 0),
+    currency: expense.currency,
+    date: expense.date,
+    recurring_id: expense.recurring_id || expense.recurringId || null,
+    notes: expense.notes || '',
+    created_at: new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from('expenses')
     .upsert([expenseData], { onConflict: 'id' })
+  
+  if (error) {
+    console.error('Save expense error:', error)
+  }
+  
   return { data, error }
 }
 
 export async function deleteExpense(id) {
-  const { error } = await supabase.from('expenses').delete().eq('id', id)
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', id)
+  
+  if (error) {
+    console.error('Delete expense error:', error)
+  }
+  
   return { error }
 }
 
@@ -55,19 +87,51 @@ export async function loadRecurring(userId) {
     .from('recurring')
     .select('*')
     .eq('user_id', userId)
+  
+  if (error) {
+    console.error('Load recurring error:', error)
+    return { data: [], error }
+  }
+  
   return { data: data || [], error }
 }
 
 export async function saveRecurring(recurring, userId) {
-  const recurringData = recurring.map(r => ({ ...r, user_id: userId, amount: parseFloat(r.amount) }))
+  const recurringData = recurring.map(r => ({
+    id: r.id,
+    user_id: userId,
+    name: r.name,
+    category: r.category,
+    amount: parseFloat(r.amount || 0),
+    currency: r.currency,
+    billing_day: r.billing_day || r.billingDay || 1,
+    active: r.active !== false,
+    notes: r.notes || '',
+    end_date: r.end_date || r.endDate || null,
+    created_at: new Date().toISOString()
+  }))
+
   const { data, error } = await supabase
     .from('recurring')
     .upsert(recurringData, { onConflict: 'id' })
+  
+  if (error) {
+    console.error('Save recurring error:', error)
+  }
+  
   return { data, error }
 }
 
 export async function deleteRecurring(id) {
-  const { error } = await supabase.from('recurring').delete().eq('id', id)
+  const { error } = await supabase
+    .from('recurring')
+    .delete()
+    .eq('id', id)
+  
+  if (error) {
+    console.error('Delete recurring error:', error)
+  }
+  
   return { error }
 }
 
@@ -78,14 +142,32 @@ export async function loadSettings(userId) {
     .select('*')
     .eq('user_id', userId)
     .single()
-  return { data, error }
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Load settings error:', error)
+  }
+  
+  return { data, error: error?.code === 'PGRST116' ? null : error }
 }
 
 export async function saveSettings(settings, userId) {
-  const settingsData = { ...settings, id: `settings_${userId}`, user_id: userId }
+  const settingsData = {
+    id: `settings_${userId}`,
+    user_id: userId,
+    company_name: settings.companyName || 'Company Costs',
+    tagline: settings.tagline || 'Cost tracking dashboard',
+    theme: settings.theme || 'light',
+    created_at: new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from('settings')
     .upsert([settingsData], { onConflict: 'user_id' })
+  
+  if (error) {
+    console.error('Save settings error:', error)
+  }
+  
   return { data, error }
 }
 
@@ -95,18 +177,32 @@ export async function loadCategories(userId) {
     .from('categories')
     .select('*')
     .eq('user_id', userId)
+  
+  if (error) {
+    console.error('Load categories error:', error)
+    return { data: [], error }
+  }
+  
   return { data: data || [], error }
 }
 
 export async function saveCategories(categories, userId) {
   const categoriesData = categories.map(c => ({
-    ...c,
-    id: c.id || `cat_${userId}_${Math.random()}`,
+    id: c.id || `cat_${userId}_${Math.random().toString(36).substr(2, 9)}`,
     user_id: userId,
+    name: c.name,
+    color: c.color,
+    created_at: new Date().toISOString()
   }))
+
   const { data, error } = await supabase
     .from('categories')
     .upsert(categoriesData, { onConflict: 'id' })
+  
+  if (error) {
+    console.error('Save categories error:', error)
+  }
+  
   return { data, error }
 }
 
@@ -117,13 +213,30 @@ export async function loadCurrencySettings(userId) {
     .select('*')
     .eq('user_id', userId)
     .single()
-  return { data, error }
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Load currency settings error:', error)
+  }
+  
+  return { data, error: error?.code === 'PGRST116' ? null : error }
 }
 
 export async function saveCurrencySettings(settings, userId) {
-  const currencyData = { ...settings, id: `currency_${userId}`, user_id: userId }
+  const currencyData = {
+    id: `currency_${userId}`,
+    user_id: userId,
+    display_currency: settings.display || 'USD',
+    rates: settings.rates || {},
+    created_at: new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from('currency_settings')
     .upsert([currencyData], { onConflict: 'user_id' })
+  
+  if (error) {
+    console.error('Save currency settings error:', error)
+  }
+  
   return { data, error }
 }
