@@ -4,33 +4,33 @@ import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES, CURRENCIES, fmtCurrency, genId } 
 
 // ── Category Manager ───────────────────────────────────────────────────────
 function CategoryManager({ categories, onSave }) {
-  const [cats, setCats] = useState(categories)
+  const [cats, setCats] = useState(() => categories.map(c => ({ id: c.id || genId('cat'), name: c.name, color: c.color })))
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#6366f1')
   const [saved, setSaved] = useState(false)
 
+  // All operations use index so name changes never break delete/color
+  function updateName(idx, val) {
+    setCats(prev => prev.map((c, i) => i === idx ? { ...c, name: val } : c))
+  }
+  function updateColor(idx, color) {
+    setCats(prev => prev.map((c, i) => i === idx ? { ...c, color } : c))
+  }
+  function removeCat(idx) {
+    setCats(prev => prev.filter((_, i) => i !== idx))
+  }
+
   function addCat() {
-    if (!newName.trim()) return
-    if (cats.find(c => c.name.toLowerCase() === newName.trim().toLowerCase())) return
-    setCats(prev => [...prev, { id: genId('cat'), name: newName.trim(), color: newColor }])
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    if (cats.find(c => c.name.toLowerCase() === trimmed.toLowerCase())) return
+    setCats(prev => [...prev, { id: genId('cat'), name: trimmed, color: newColor }])
     setNewName(''); setNewColor('#6366f1')
   }
 
-  function updateColor(name, color) {
-    setCats(prev => prev.map(c => c.name === name ? { ...c, color } : c))
-  }
-
-  function updateName(oldName, newNameVal) {
-    if (!newNameVal.trim()) return
-    setCats(prev => prev.map(c => c.name === oldName ? { ...c, name: newNameVal.trim() } : c))
-  }
-
-  function removeCat(name) {
-    setCats(prev => prev.filter(c => c.name !== name))
-  }
-
   function handleSave() {
-    onSave(cats)
+    const valid = cats.filter(c => c.name.trim())
+    onSave(valid)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -45,33 +45,34 @@ function CategoryManager({ categories, onSave }) {
     <div className="space-y-3">
       {/* Existing categories */}
       <div className="space-y-1.5">
-        {cats.map(cat => (
-          <div key={cat.name} className="flex items-center gap-3 px-3 py-2 rounded-xl" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            {/* Color swatch — clicking opens native color picker */}
+        {cats.map((cat, idx) => (
+          <div key={cat.id} className="flex items-center gap-3 px-3 py-2 rounded-xl" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            {/* Color swatch */}
             <div className="relative flex-shrink-0">
-              <div className="w-6 h-6 rounded-lg cursor-pointer ring-2 ring-offset-1 ring-transparent hover:ring-offset-1"
-                style={{ background: cat.color, ringColor: cat.color }}
-                onClick={() => document.getElementById(`color-${cat.name}`).click()}
+              <div className="w-6 h-6 rounded-lg cursor-pointer"
+                style={{ background: cat.color }}
+                onClick={() => document.getElementById(`color-${cat.id}`).click()}
                 title="Click to change color"
               />
               <input
-                id={`color-${cat.name}`}
+                id={`color-${cat.id}`}
                 type="color"
                 value={cat.color}
-                onChange={e => updateColor(cat.name, e.target.value)}
+                onChange={e => updateColor(idx, e.target.value)}
                 className="absolute opacity-0 w-0 h-0"
               />
             </div>
             <input
               className="flex-1 text-sm font-medium bg-transparent border-none outline-none"
               style={{ color: 'var(--text-1)' }}
-              defaultValue={cat.name}
-              onBlur={e => updateName(cat.name, e.target.value)}
+              value={cat.name}
+              onChange={e => updateName(idx, e.target.value)}
             />
             <button
               className="btn-danger p-1 rounded-lg flex-shrink-0"
               style={{ border: 'none' }}
-              onClick={() => removeCat(cat.name)}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => removeCat(idx)}
               title="Delete category"
             >
               <Trash2 size={12} />
