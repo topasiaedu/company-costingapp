@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
-import { Search, Plus, Pencil, Trash2, RefreshCw, ChevronDown, CalendarDays, X, Download, Settings2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, RefreshCw, ChevronDown, CalendarDays, X, Download } from 'lucide-react'
 import { filterExpenses, getCategoryColor, exportToCSV, fmtCurrency } from '../data/store'
 
 const QUICK_RANGES = [
@@ -11,7 +11,7 @@ const QUICK_RANGES = [
   { label: 'All time',    getRange: () => ({ from:'', to:'' }) },
 ]
 
-export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categories, currencySettings, onManageSubscriptions }) {
+export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categories, currencySettings }) {
   const init = QUICK_RANGES[0].getRange()
   const [dateFrom,        setDateFrom]        = useState(init.from)
   const [dateTo,          setDateTo]          = useState(init.to)
@@ -105,10 +105,6 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
             </button>
           )}
 
-          {/* Manage subscriptions */}
-          <button className="btn-ghost gap-1.5 text-xs ml-auto" onClick={onManageSubscriptions}>
-            <Settings2 size={13}/> Manage Subscriptions
-          </button>
         </div>
       </div>
 

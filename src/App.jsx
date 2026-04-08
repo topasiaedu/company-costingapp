@@ -54,9 +54,8 @@ export default function App() {
   const [settings,         setSettings]         = useState(DEFAULT_SETTINGS)
   const [categories,       setCategories]       = useState(DEFAULT_CATEGORIES)
   const [currencySettings, setCurrencySettings] = useState(DEFAULT_CURRENCY_SETTINGS)
-  const [expenseModal,       setExpenseModal]       = useState(null)
-  const [mobileNav,          setMobileNav]          = useState(false)
-  const [showSubscriptions,  setShowSubscriptions]  = useState(false)
+  const [expenseModal, setExpenseModal] = useState(null)
+  const [mobileNav,    setMobileNav]    = useState(false)
   const [saveStatus,       setSaveStatus]       = useState('idle')
   const [saveError,        setSaveError]        = useState('')
 
@@ -151,9 +150,8 @@ export default function App() {
   const handleExpenseSave = useCallback(async (saved) => {
     if (!user) return
 
-    // If user toggled "Recurring monthly" ON and it's not yet linked to a recurring item
+    // New recurring subscription: create the template
     if (saved.isRecurring && !saved.recurringId) {
-      // Create a new recurring item from this expense
       const newRecurring = {
         id:         genId('r'),
         name:       saved.name,
@@ -165,23 +163,29 @@ export default function App() {
         notes:      saved.notes || '',
         endDate:    saved.endDate || null,
       }
-      // Link the expense to the new recurring item
-      saved = { ...saved, recurringId: newRecurring.id, recurring_id: newRecurring.id }
-
-      // Add to recurring state immediately so Recurring tab shows it
+      saved = { ...saved, recurringId: newRecurring.id }
       setRecurring(prev => [...prev, newRecurring])
-      // Save recurring item to DB
       saveOneRecurring(newRecurring, user.id)
     }
 
-    // Update expenses state
+    // Editing an existing recurring expense → auto-sync the template so
+    // future auto-generated months use the updated name/amount/category
+    if (saved.recurringId) {
+      const template = recurring.find(r => r.id === saved.recurringId)
+      if (template) {
+        const updated = { ...template, name: saved.name, category: saved.category, amount: saved.amount, currency: saved.currency, notes: saved.notes || '' }
+        setRecurring(prev => prev.map(r => r.id === saved.recurringId ? updated : r))
+        saveOneRecurring(updated, user.id)
+      }
+    }
+
     setExpenses(prev => {
       const idx = prev.findIndex(e => e.id === saved.id)
       return idx >= 0 ? prev.map(e => e.id === saved.id ? { ...e, ...saved } : e) : [...prev, saved]
     })
     setExpenseModal(null)
     doSave(() => saveExpense(saved, user.id))
-  }, [user, doSave])
+  }, [user, doSave, recurring])
 
   const handleExpenseDelete = useCallback(async (id) => {
     if (!user) return
@@ -191,7 +195,7 @@ export default function App() {
       const recId = expense.recurringId
       const recStillExists = recurring.some(r => r.id === recId)
       const confirmMsg = recStillExists
-        ? `"${expense.name}" is a recurring subscription.\n\nThis will delete the subscription AND all its expense history.\n\nTo pause future entries only, use the Recurring tab instead.\n\nDelete everything?`
+        ? `"${expense.name}" is a recurring subscription.\n\nThis will delete the subscription AND all its expense history.\n\nDelete everything?`
         : `"${expense.name}" is linked to a subscription that no longer exists.\n\nDelete this expense?`
       if (!window.confirm(confirmMsg)) return
       // Remove from state
@@ -338,7 +342,7 @@ export default function App() {
         {/* Main content */}
         <main className="flex-1 p-5 lg:p-6 overflow-auto">
           {tab==='dashboard' && <Dashboard     expenses={expenses} recurring={recurring} categories={categories} currencySettings={currencySettings}/>}
-          {tab==='expenses'  && <ExpensesTable expenses={expenses} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings} onManageSubscriptions={()=>setShowSubscriptions(true)}/>}
+          {tab==='expenses'  && <ExpensesTable expenses={expenses} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings}/>}
           {tab==='settings'  && <Settings      settings={settings} onSave={handleSettingsSave} onThemeChange={handleThemeChange} categories={categories} onCategoriesSave={handleCategoriesSave} currencySettings={currencySettings} onCurrencySave={handleCurrencySave}/>}
         </main>
       </div>
@@ -353,32 +357,6 @@ export default function App() {
         />
       )}
 
-      {showSubscriptions && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSubscriptions(false)} />
-          <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center justify-between px-6 py-4 sticky top-0 z-10"
-              style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-              <h2 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Manage Subscriptions</h2>
-              <button className="btn-ghost p-1.5 rounded-lg" style={{ border: 'none' }} onClick={() => setShowSubscriptions(false)}>
-                <X size={15} />
-              </button>
-            </div>
-            <div className="p-4">
-              <RecurringManager
-                recurring={recurring}
-                onAdd={handleRecurringAdd}
-                onUpdate={handleRecurringUpdate}
-                onDelete={handleRecurringDelete}
-                onToggle={handleRecurringToggle}
-                categories={categories}
-                currencySettings={currencySettings}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
