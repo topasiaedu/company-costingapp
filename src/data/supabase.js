@@ -173,14 +173,19 @@ export async function loadCategories(userId) {
 }
 
 export async function saveCategories(categories, userId) {
+  // Delete all existing categories for this user, then insert the current set.
+  // This ensures deleted categories are actually removed from the DB.
+  const { error: delErr } = await supabase.from('categories').delete().eq('user_id', userId)
+  if (delErr) { console.error('saveCategories delete:', delErr); return { error: delErr } }
+  if (categories.length === 0) return { error: null }
   const rows = categories.map(c => ({
-    id:      c.id || `cat_${userId}_${Math.random().toString(36).substr(2, 9)}`,
+    id:      c.id || `cat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     user_id: userId,
     name:    c.name,
     color:   c.color,
   }))
-  const { data, error } = await supabase.from('categories').upsert(rows, { onConflict: 'id' })
-  if (error) console.error('saveCategories:', error)
+  const { data, error } = await supabase.from('categories').insert(rows)
+  if (error) console.error('saveCategories insert:', error)
   return { data, error }
 }
 
