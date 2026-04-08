@@ -362,7 +362,7 @@ export default function App() {
         {/* Main content */}
         <main className="flex-1 p-5 lg:p-6 overflow-auto">
           {tab==='dashboard' && <Dashboard     expenses={expenses} recurring={recurring} categories={categories} currencySettings={currencySettings}/>}
-          {tab==='expenses'  && <ExpensesTable expenses={expenses} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings}/>}
+          {tab==='expenses'  && <ExpensesTable expenses={expenses} recurring={recurring} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} categories={categories} currencySettings={currencySettings}/>}
           {tab==='settings'  && <Settings      settings={settings} onSave={handleSettingsSave} onThemeChange={handleThemeChange} categories={categories} onCategoriesSave={handleCategoriesSave} currencySettings={currencySettings} onCurrencySave={handleCurrencySave}/>}
         </main>
       </div>

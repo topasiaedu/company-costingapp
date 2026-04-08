@@ -81,8 +81,11 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
   const lastMonthTotal    = expenses.filter(e=>e.date?.startsWith(lastMonthStr)).reduce((s,e)=>s+convertToDisplay(e.amount,e.currency,currencySettings),0)
   const trend = lastMonthTotal ? ((currentMonthTotal-lastMonthTotal)/lastMonthTotal)*100 : 0
 
-  const activeRecurring = recurring.filter(r=>r.active)
-  const recurringTotal  = activeRecurring.reduce((s,r)=>s+convertToDisplay(r.amount,r.currency,currencySettings),0)
+  const activeRecurring        = recurring.filter(r=>r.active)
+  const activeMonthly          = activeRecurring.filter(r=>(r.frequency||'monthly')==='monthly')
+  const activeYearly           = activeRecurring.filter(r=>r.frequency==='yearly')
+  const monthlyRecurringTotal  = activeMonthly.reduce((s,r)=>s+convertToDisplay(r.amount,r.currency,currencySettings),0)
+  const yearlyRecurringTotal   = activeYearly.reduce((s,r)=>s+convertToDisplay(r.amount,r.currency,currencySettings),0)
   const topCategory = categoryTotals[0]
 
   return (
@@ -111,11 +114,12 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="This Month"     value={fmtCurrency(currentMonthTotal, display)} sub={format(new Date(),'MMMM yyyy')} icon={DollarSign} trend={trend} iconColor="#8b5cf6"/>
-        <StatCard label="Recurring / mo" value={fmtCurrency(recurringTotal, display)}    sub={`${activeRecurring.length} active`}               icon={RefreshCw} iconColor="#22c55e"/>
-        <StatCard label="Top Category"   value={topCategory?.name??'—'}                  sub={topCategory?`${fmtCurrency(topCategory.value,display)} this period`:'No data'} icon={Package} iconColor="#f59e0b"/>
-        <StatCard label="Period Total"   value={fmtCurrency(periodTotal, display)}        sub="Selected period"                                  icon={TrendingUp} iconColor="#3b82f6"/>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="This Month"      value={fmtCurrency(currentMonthTotal, display)}      sub={format(new Date(),'MMMM yyyy')}                                                   icon={DollarSign} trend={trend}  iconColor="#8b5cf6"/>
+        <StatCard label="Recurring /mo"   value={fmtCurrency(monthlyRecurringTotal, display)}  sub={`${activeMonthly.length} active subscription${activeMonthly.length!==1?'s':''}`} icon={RefreshCw}               iconColor="#22c55e"/>
+        <StatCard label="Recurring /yr"   value={fmtCurrency(yearlyRecurringTotal, display)}   sub={`${activeYearly.length} active subscription${activeYearly.length!==1?'s':''}`}   icon={RefreshCw}               iconColor="#f59e0b"/>
+        <StatCard label="Top Category"    value={topCategory?.name??'—'}                       sub={topCategory?`${fmtCurrency(topCategory.value,display)} this period`:'No data'}    icon={Package}                 iconColor="#ec4899"/>
+        <StatCard label="Period Total"    value={fmtCurrency(periodTotal, display)}             sub="Selected period"                                                                  icon={TrendingUp}               iconColor="#3b82f6"/>
       </div>
 
       {/* Charts */}
@@ -180,7 +184,12 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
                 </div>
               </div>
               <div className="flex items-center gap-2 text-right">
-                {e.recurringId && <span className="badge" style={{background:'var(--accent-dim)',color:'var(--accent)'}}>Recurring</span>}
+                {e.recurringId && (() => {
+                  const freq = recurring.find(r=>r.id===e.recurringId)?.frequency || 'monthly'
+                  return <span className="badge" style={{background: freq==='yearly'?'rgba(245,158,11,0.12)':'var(--accent-dim)', color: freq==='yearly'?'#f59e0b':'var(--accent)'}}>
+                    {freq==='yearly' ? '↺ Yearly' : '↺ Monthly'}
+                  </span>
+                })()}
                 <div>
                   <p className="text-sm font-semibold" style={{color:'var(--text-1)'}}>{fmtCurrency(e.amount, e.currency)}</p>
                   {e.currency !== display && (

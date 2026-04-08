@@ -11,7 +11,7 @@ const QUICK_RANGES = [
   { label: 'All time',    getRange: () => ({ from:'', to:'' }) },
 ]
 
-export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categories, currencySettings }) {
+export default function ExpensesTable({ expenses, recurring = [], onAdd, onEdit, onDelete, categories, currencySettings }) {
   const init = QUICK_RANGES[0].getRange()
   const [dateFrom,        setDateFrom]        = useState(init.from)
   const [dateTo,          setDateTo]          = useState(init.to)
@@ -28,7 +28,8 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
     let list = filterExpenses(expenses, { dateFrom, dateTo })
     if (search)                    { const q=search.toLowerCase(); list=list.filter(e => e.name.toLowerCase().includes(q)||e.category.toLowerCase().includes(q)) }
     if (filterCategory !== 'All')  { list = list.filter(e => e.category === filterCategory) }
-    if (filterType === 'Recurring'){ list = list.filter(e => e.recurringId || e.recurring_id) }
+    if (filterType === 'Monthly')  { list = list.filter(e => { const rid=e.recurringId||e.recurring_id; if(!rid) return false; const freq=recurring.find(r=>r.id===rid)?.frequency||'monthly'; return freq==='monthly' }) }
+    if (filterType === 'Yearly')   { list = list.filter(e => { const rid=e.recurringId||e.recurring_id; if(!rid) return false; return recurring.find(r=>r.id===rid)?.frequency==='yearly' }) }
     if (filterType === 'One-off')  { list = list.filter(e => !e.recurringId && !e.recurring_id) }
     return [...list].sort((a,b) => {
       let av=a[sortField]??'', bv=b[sortField]??''
@@ -92,7 +93,7 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
 
           {/* Type pills */}
           <div className="flex gap-1">
-            {['All','Recurring','One-off'].map(t=>(
+            {['All','Monthly','Yearly','One-off'].map(t=>(
               <button key={t} className={`pill ${filterType===t?'active':''}`} onClick={()=>setFilterType(t)}>{t}</button>
             ))}
           </div>
@@ -140,9 +141,14 @@ export default function ExpensesTable({ expenses, onAdd, onEdit, onDelete, categ
                     {fmtCurrency(e.amount, e.currency)}
                   </td>
                   <td>
-                    {e.recurringId || e.recurring_id
-                      ? <span className="badge" style={{ background:'var(--accent-dim)', color:'var(--accent)' }}><RefreshCw size={9}/> Recurring</span>
-                      : <span className="badge" style={{ background:'var(--surface-2)', color:'var(--text-3)' }}>One-off</span>}
+                    {(() => {
+                      const rid = e.recurringId || e.recurring_id
+                      if (!rid) return <span className="badge" style={{ background:'var(--surface-2)', color:'var(--text-3)' }}>One-off</span>
+                      const freq = recurring.find(r=>r.id===rid)?.frequency || 'monthly'
+                      return freq === 'yearly'
+                        ? <span className="badge" style={{ background:'rgba(245,158,11,0.12)', color:'#f59e0b' }}><RefreshCw size={9}/> Yearly</span>
+                        : <span className="badge" style={{ background:'var(--accent-dim)', color:'var(--accent)' }}><RefreshCw size={9}/> Monthly</span>
+                    })()}
                   </td>
                   <td>
                     <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
