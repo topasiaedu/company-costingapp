@@ -716,3 +716,96 @@ export function buildPnlGrid(expenses, projects, year, currencySettings, options
     viewMode,
   }
 }
+
+const PNL_ZERO_THRESHOLD = 0.005
+
+/**
+ * Slice a full P&L grid to a single month for vertical month view.
+ * @param {ReturnType<typeof buildPnlGrid>} grid
+ * @param {number} monthIndex - 0–11
+ * @returns {{
+ *   year: number,
+ *   monthIndex: number,
+ *   monthLabel: string,
+ *   viewMode: string,
+ *   grandTotal: number,
+ *   prevMonthTotal: number|null,
+ *   prevYear: number,
+ *   prevMonthIndex: number,
+ *   ytdTotal: number,
+ *   sections: Array<{
+ *     project: string,
+ *     monthTotal: number,
+ *     groups: Array<{ id: string, name: string, amount: number, lines: Array<{ label: string, amount: number, isAddon: boolean }> }>,
+ *     rows: Array<{ name: string, amount: number }>,
+ *   }>,
+ * }}
+ */
+export function slicePnlMonth(grid, monthIndex) {
+  const mi = Math.max(0, Math.min(11, monthIndex))
+  const monthLabel = MONTH_NAMES[mi] || grid.months[mi]?.label || ""
+  const grandTotal = grid.grandTotals[mi] ?? 0
+  const ytdTotal = grid.grandTotals.slice(0, mi + 1).reduce((a, b) => a + b, 0)
+
+  let prevMonthTotal = null
+  let prevYear = grid.year
+  let prevMonthIndex = mi - 1
+
+  if (mi > 0) {
+    prevMonthTotal = grid.grandTotals[mi - 1] ?? 0
+  } else {
+    prevYear = grid.year - 1
+    prevMonthIndex = 11
+  }
+
+  const sections = []
+
+  for (const section of grid.sections) {
+    const groups = []
+
+    for (const group of section.groups || []) {
+      const lines = (group.lines || [])
+        .map((line) => ({
+          label: line.label,
+          amount: line.months[mi] ?? 0,
+          isAddon: !!line.isAddon,
+        }))
+        .filter((line) => line.amount > PNL_ZERO_THRESHOLD)
+
+      const amount = lines.reduce((sum, line) => sum + line.amount, 0)
+      if (amount > PNL_ZERO_THRESHOLD) {
+        groups.push({ id: group.id, name: group.name, amount, lines })
+      }
+    }
+
+    const rows = (section.rows || [])
+      .map((row) => ({
+        name: row.name,
+        amount: row.months[mi] ?? 0,
+      }))
+      .filter((row) => row.amount > PNL_ZERO_THRESHOLD)
+
+    const monthTotal = section.monthTotals[mi] ?? 0
+    if (monthTotal > PNL_ZERO_THRESHOLD) {
+      sections.push({
+        project: section.project,
+        monthTotal,
+        groups,
+        rows,
+      })
+    }
+  }
+
+  return {
+    year: grid.year,
+    monthIndex: mi,
+    monthLabel,
+    viewMode: grid.viewMode,
+    grandTotal,
+    prevMonthTotal,
+    prevYear,
+    prevMonthIndex,
+    ytdTotal,
+    sections,
+  }
+}

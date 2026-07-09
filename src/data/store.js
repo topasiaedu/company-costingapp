@@ -220,6 +220,12 @@ export const PNL_VIEW_MODES = {
   CASH: 'cash',
 }
 
+/** P&L report layout: year-wide grid vs single-month vertical breakdown */
+export const PNL_LAYOUT_MODES = {
+  YEAR: 'year',
+  MONTH: 'month',
+}
+
 export const EXPENSE_NOTE_AMORTIZED = 'Amortized annual fee'
 export const EXPENSE_NOTE_ANNUAL_INVOICE = 'Annual invoice'
 

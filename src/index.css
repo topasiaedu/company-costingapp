@@ -326,6 +326,40 @@ body {
   background: var(--surface-2);
 }
 
+.pnl-month-col-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  text-align: right;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pnl-month-col-btn:hover {
+  color: var(--accent);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.pnl-screenshot-mode .pnl-toolbar,
+.pnl-screenshot-mode .pnl-summary-cards {
+  display: none !important;
+}
+
+.pnl-screenshot-mode .pnl-table-wrap {
+  overflow-x: visible;
+}
+
+.pnl-screenshot-mode .pnl-footer {
+  margin-top: 0.5rem;
+}
+
 @media print {
   .print\:hidden { display: none !important; }
   .sidebar, header { display: none !important; }

@@ -38,6 +38,7 @@ Related docs: [01-project-overview.md](./01-project-overview.md) · [03-supabase
 - **Fixed sidebar** — only main content scrolls; sidebar stays in place.
 - **Collapsible sidebar** — chevron in sidebar header; icon-only rail (~64px) vs full (~208px); preference saved in `localStorage`.
 - **P&L header simplified** — duplicate “Tech Department P&L” card removed; export/screenshot controls live in view bar.
+- **P&L Month view** — Year grid / Month view layout toggle; vertical single-month breakdown with summary cards (total, vs last month, largest project, % YTD); cross-year month navigation; tall CSV export; click year-grid month column to drill down; zero rows hidden per view mode (amortized virtual rows still show).
 
 ### Data corrections (Supabase)
 

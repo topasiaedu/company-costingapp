@@ -1,7 +1,7 @@
 # P&L Month View — Feature Plan
 
 **Last updated:** 10 July 2026  
-**Status:** Planned (not yet implemented)  
+**Status:** Implemented (10 July 2026)  
 **Depends on:** Current P&L year grid (`ProjectPnl.jsx`, `buildPnlGrid()`)
 
 Related docs: [01-project-overview.md](./01-project-overview.md) · [04-decisions-and-accomplishments.md](./04-decisions-and-accomplishments.md) · [06-pnl-month-view-agent-prompts.md](./06-pnl-month-view-agent-prompts.md)
