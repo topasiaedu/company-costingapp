@@ -15,6 +15,7 @@ dist/
 .vscode/
 .idea/
 .cursor/
+.claude/
 
 # One-off import / migration artifacts
 tmp-*

@@ -4,7 +4,7 @@
 **Status:** Implemented (10 July 2026)  
 **Depends on:** Current P&L year grid (`ProjectPnl.jsx`, `buildPnlGrid()`)
 
-Related docs: [01-project-overview.md](./01-project-overview.md) · [04-decisions-and-accomplishments.md](./04-decisions-and-accomplishments.md) · [06-pnl-month-view-agent-prompts.md](./06-pnl-month-view-agent-prompts.md)
+Related docs: [01-project-overview.md](./01-project-overview.md) · [04-decisions-and-accomplishments.md](./04-decisions-and-accomplishments.md)
 
 ---
 
@@ -122,9 +122,9 @@ Behavior:
 - Amount cells: numbers only, no currency prefix (match year grid)
 - Footer: generated timestamp, view mode, display currency, month total
 
-### 4.3 Year grid enhancement (Agent 2)
+### 4.3 Year grid enhancement
 
-Clicking a **month column header** (e.g. "Jul") switches to Month view for that year+month. Optional but in scope for Agent 2.
+Clicking a **month column header** (e.g. "Jul") switches to Month view for that year+month.
 
 ### 4.4 Export
 
@@ -254,39 +254,24 @@ When layout is MONTH: `year` + `month` drive grid build + slice.
 5. Cross-year month navigation works
 6. Month Export CSV downloads tall-format file
 7. Screenshot mode works in month view
-8. Click month column header → month view (Agent 2)
+8. Click month column header → month view
 9. `npm run build` passes
 
 ---
 
-## 6. Agent split
-
-Work is split into **2 agents** (~3–5 files each). See [06-pnl-month-view-agent-prompts.md](./06-pnl-month-view-agent-prompts.md).
-
-| Agent | Scope | Est. time |
-|-------|-------|-----------|
-| **Agent 1** | Data layer + layout toggle + month picker + month table + summary cards | 2–4 h |
-| **Agent 2** | Month CSV export + column click drill-down + screenshot polish + CSS | 1–3 h |
-
-Run Agent 1 first; Agent 2 assumes Agent 1 is merged.
-
----
-
-## 7. Out of scope (v1)
+## 6. Out of scope (v1)
 
 - New app tab
 - Revenue / profit lines
 - MoM sparklines per line item
 - Inline expense edit from month view
-- Copy-to-clipboard TSV (optional v2 — was Agent 6 optional in `02-agent-implementation-prompts.md`)
+- Copy-to-clipboard TSV (optional v2)
 - Dashboard changes
 - Supabase schema changes
 
 ---
 
-## 8. Testing checklist (manual)
-
-After both agents complete:
+## 7. Testing checklist (manual)
 
 1. Open P&L → defaults to Year grid, current year
 2. Toggle Month view → shows current month vertical breakdown

@@ -4,7 +4,7 @@
 **Supabase project:** `brmhzbjhpfqmmhatffmi`  
 **Purpose:** Record what was built, what was decided, and how data should be interpreted. Use this doc when onboarding, auditing P&L, or continuing development.
 
-Related docs: [01-project-overview.md](./01-project-overview.md) · [03-supabase-mcp.md](./03-supabase-mcp.md) · [QA.md](./QA.md)
+Related docs: [01-project-overview.md](./01-project-overview.md) · [03-supabase-mcp.md](./03-supabase-mcp.md) · [05-pnl-month-view-plan.md](./05-pnl-month-view-plan.md)
 
 ---
 

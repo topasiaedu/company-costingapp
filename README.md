@@ -21,6 +21,8 @@ Never put the `service_role` key in the frontend or Vercel env.
 
 Database schema: run `supabase-setup.sql` in the Supabase SQL Editor (or `node setup-supabase.js` to print it).
 
+See [docs/README.md](./docs/README.md) for project documentation.
+
 ## Deploy on Vercel
 
 1. Import this repo in Vercel

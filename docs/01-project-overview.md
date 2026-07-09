@@ -166,18 +166,18 @@ Set locally in `.env` and in Vercel project settings.
 
 ---
 
-## Current status (as of setup)
+## Current status (July 2026)
 
 | Item | Status |
 |------|--------|
-| New Supabase project | ✅ Created |
-| `supabase-setup.sql` | ✅ Run |
+| Supabase project + schema | ✅ Live |
 | `.env` with URL + anon key | ✅ Configured |
-| Core features (projects, import, P&L, subscriptions) | ✅ Implemented in codebase |
-| Vercel deployment | ⏳ Pending |
-| Real mastersheet CSV imported & verified | ⏳ Pending |
-| Hardcoded fallback keys removed | ⏳ Pending |
-| README / `.env.example` | ⏳ Pending |
+| Core features (projects, import, P&L, subscriptions) | ✅ Implemented |
+| P&L month view | ✅ Implemented |
+| Vercel deployment | ✅ Configured (`vercel.json`) |
+| Mastersheet CSV imported into Supabase | ✅ Done |
+| Hardcoded fallback keys removed | ✅ Done |
+| README + `.env.example` | ✅ Done |
 
 ---
 
@@ -187,7 +187,7 @@ Set locally in `.env` and in Vercel project settings.
 - **Output directory:** `dist`
 - **Framework:** Vite (or Other static)
 - **Env vars:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- SPA routing: all routes serve `index.html` (add `vercel.json` rewrites if needed)
+- SPA routing: all routes serve `index.html` via `vercel.json` rewrites
 
 ---
 
@@ -212,9 +212,13 @@ Set locally in `.env` and in Vercel project settings.
 
 ---
 
+## Related docs
+
+- [docs/README.md](./README.md) — Documentation index
+- [04-decisions-and-accomplishments.md](./04-decisions-and-accomplishments.md) — **Source of truth** for business rules, data corrections, and open items
+- [05-pnl-month-view-plan.md](./05-pnl-month-view-plan.md) — Month view feature spec and testing checklist
+
 ## Related files
 
-- `docs/02-agent-implementation-prompts.md` — Copy-paste prompts for implementation agents
-- `docs/04-decisions-and-accomplishments.md` — **Source of truth** for business rules, data corrections, and open items
 - `supabase-setup.sql` — Database setup
 - `supabase-migration.sql` — Incremental migration (if upgrading old DB)
