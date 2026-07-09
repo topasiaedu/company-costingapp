@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
 
 /* ── CSS Variables (Light) ─────────────────────────────────────────── */
 :root {
@@ -19,7 +19,8 @@
   --accent-glow:  rgba(124,58,237,0.25);
   --sb-bg:        #0c0b14;
   --sb-border:    rgba(255,255,255,0.05);
-  --sb-text:      #6868a0;
+  --sb-text:      #9b9bc4;
+  --sb-text-muted:#7878a8;
   --sb-text-act:  #ffffff;
   --sb-act-bg:    rgba(139,92,246,0.14);
   --sb-act-bar:   #8b5cf6;
@@ -206,10 +207,10 @@ body {
   .sidebar-item {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
-    padding: 0.6rem 0.85rem;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 0.625rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--sb-text);
     cursor: pointer;
@@ -217,7 +218,15 @@ body {
     position: relative;
     border: 1px solid transparent;
   }
-  .sidebar-item:hover { color: white; background: rgba(255,255,255,0.04); }
+  .sidebar-item:hover { color: #e8e8f8; background: rgba(255,255,255,0.06); }
+  .sidebar-footer-btn {
+    color: var(--sb-text);
+    transition: all 0.15s;
+  }
+  .sidebar-footer-btn:hover {
+    color: #e8e8f8;
+    background: rgba(255,255,255,0.04);
+  }
   .sidebar-item.active {
     color: var(--sb-text-act);
     background: var(--sb-act-bg);
@@ -232,6 +241,20 @@ body {
     width: 3px;
     background: var(--sb-act-bar);
     border-radius: 0 2px 2px 0;
+  }
+
+  .sidebar.collapsed .sidebar-item {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  .sidebar.collapsed .sidebar-item.active::before {
+    left: 0;
+  }
+  .sidebar.collapsed .sidebar-footer-btn {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   /* Stat card gradient number */
@@ -289,3 +312,35 @@ body {
 
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .modal-enter { animation: slideUp 0.2s cubic-bezier(0.16,1,0.3,1); }
+
+/* ── P&L report screenshot / print contrast ────────────────────────── */
+.pnl-table-wrap {
+  background: var(--surface);
+}
+
+.pnl-row:hover td {
+  background: var(--surface-2);
+}
+
+.pnl-row:hover td.pnl-sticky {
+  background: var(--surface-2);
+}
+
+@media print {
+  .print\:hidden { display: none !important; }
+  .sidebar, header { display: none !important; }
+  .pnl-report-root {
+    color: #0e0d18 !important;
+  }
+  .pnl-table-wrap,
+  .pnl-sticky {
+    background: #ffffff !important;
+    box-shadow: none !important;
+    color: #0e0d18 !important;
+  }
+  .pnl-table td,
+  .pnl-table th {
+    color: #0e0d18 !important;
+    border-color: #e2e2ec !important;
+  }
+}

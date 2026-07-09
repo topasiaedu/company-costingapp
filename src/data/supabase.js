@@ -1,9 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jufozzefpxiqbpeajhiy.supabase.co'
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_RpBO5Cc2VZn2khReUEQULQ_LyxFxJz6'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+/** True when VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are both set. */
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+
+if (!isSupabaseConfigured) {
+  console.error(
+    '[Company Costing] Missing Supabase config. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env (see .env.example).'
+  )
+}
+
+export const supabase = isSupabaseConfigured
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null
+
+/* Expected tables: expenses, recurring, settings, categories, currency_settings, projects */
 
 // ── Auth ────────────────────────────────────────────────────────────
 export async function signUp(email, password) {
@@ -30,12 +43,14 @@ function recurringFromDB(r) {
     category:     r.category,
     amount:       Number(r.amount),
     currency:     r.currency,
+    project:      r.project || null,
     billingDay:   r.billing_day,
     billingMonth: r.billing_month || 1,
     frequency:    r.frequency || 'monthly',
     active:       r.active,
     notes:        r.notes || '',
     endDate:      r.end_date,
+    parentId:     r.parent_id || null,
   }
 }
 
@@ -47,12 +62,14 @@ function recurringToDB(r, userId) {
     category:      r.category,
     amount:        Number(r.amount),
     currency:      r.currency,
+    project:       r.project || null,
     billing_day:   r.billingDay,
     billing_month: r.billingMonth || 1,
     frequency:     r.frequency || 'monthly',
     active:        r.active,
     notes:         r.notes || '',
     end_date:      r.endDate || null,
+    parent_id:     r.parentId || null,
   }
 }
 
@@ -65,7 +82,9 @@ function expenseFromDB(e) {
     amount:      Number(e.amount),
     currency:    e.currency,
     date:        e.date,
-    recurringId: e.recurring_id || null,   // ← normalize to camelCase
+    project:     e.project || null,
+    expenseType: e.expense_type || null,
+    recurringId: e.recurring_id || null,
     notes:       e.notes || '',
   }
 }
@@ -90,7 +109,9 @@ export async function saveExpense(expense, userId) {
     amount:       Number(expense.amount),
     currency:     expense.currency,
     date:         expense.date,
-    recurring_id: expense.recurringId || expense.recurring_id || null,  // ← accept either
+    project:      expense.project || null,
+    expense_type: expense.expenseType || (expense.recurringId ? 'subscription' : 'one-time'),
+    recurring_id: expense.recurringId || expense.recurring_id || null,
     notes:        expense.notes || '',
   }
   const { data, error } = await supabase.from('expenses').upsert([row], { onConflict: 'id' })
@@ -193,17 +214,86 @@ export async function saveCategories(categories, userId) {
 export async function loadCurrencySettings(userId) {
   const { data, error } = await supabase.from('currency_settings').select('*').eq('user_id', userId).single()
   if (error && error.code !== 'PGRST116') console.error('loadCurrencySettings:', error)
-  return { data, error: error?.code === 'PGRST116' ? null : error }
+  const mapped = data
+    ? { display: data.display_currency || 'MYR', rates: data.rates || {} }
+    : null
+  return { data: mapped, error: error?.code === 'PGRST116' ? null : error }
 }
 
 export async function saveCurrencySettings(settings, userId) {
   const row = {
     id:               `currency_${userId}`,
     user_id:          userId,
-    display_currency: settings.display || 'USD',
+    display_currency: settings.display || 'MYR',
     rates:            settings.rates || {},
   }
   const { data, error } = await supabase.from('currency_settings').upsert([row], { onConflict: 'user_id' })
   if (error) console.error('saveCurrencySettings:', error)
   return { data, error }
+}
+
+// ── Projects ────────────────────────────────────────────────────────
+export async function loadProjects(userId) {
+  const { data, error } = await supabase.from('projects').select('*').eq('user_id', userId)
+  // Missing table / RLS / network: log and return empty so the app still boots
+  if (error) {
+    console.error('loadProjects:', error)
+    return { data: [], error }
+  }
+  return { data: data || [], error: null }
+}
+
+export async function saveProjects(projects, userId) {
+  const { error: delErr } = await supabase.from('projects').delete().eq('user_id', userId)
+  if (delErr) { console.error('saveProjects delete:', delErr); return { error: delErr } }
+  if (projects.length === 0) return { error: null }
+  const rows = projects.map(p => ({
+    id:      p.id || `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    user_id: userId,
+    name:    p.name,
+    color:   p.color,
+  }))
+  const { data, error } = await supabase.from('projects').insert(rows)
+  if (error) console.error('saveProjects insert:', error)
+  return { data, error }
+}
+
+export async function saveExpensesBatch(expenses, userId) {
+  if (!expenses.length) return { error: null }
+  const rows = expenses.map(expense => ({
+    id:           expense.id,
+    user_id:      userId,
+    name:         expense.name,
+    category:     expense.category,
+    amount:       Number(expense.amount),
+    currency:     expense.currency,
+    date:         expense.date,
+    project:      expense.project || null,
+    expense_type: expense.expenseType || (expense.recurringId ? 'subscription' : 'one-time'),
+    recurring_id: expense.recurringId || null,
+    notes:        expense.notes || '',
+  }))
+  const { error } = await supabase.from('expenses').upsert(rows, { onConflict: 'id' })
+  if (error) console.error('saveExpensesBatch:', error)
+  return { error }
+}
+
+export async function saveRecurringBatch(items, userId) {
+  if (!items.length) return { error: null }
+  const rows = items.map(r => recurringToDB(r, userId))
+  const { error } = await supabase.from('recurring').upsert(rows, { onConflict: 'id' })
+  if (error) console.error('saveRecurringBatch:', error)
+  return { error }
+}
+
+export async function deleteAllUserExpenses(userId) {
+  const { error } = await supabase.from('expenses').delete().eq('user_id', userId)
+  if (error) console.error('deleteAllUserExpenses:', error)
+  return { error }
+}
+
+export async function deleteAllUserRecurring(userId) {
+  const { error } = await supabase.from('recurring').delete().eq('user_id', userId)
+  if (error) console.error('deleteAllUserRecurring:', error)
+  return { error }
 }

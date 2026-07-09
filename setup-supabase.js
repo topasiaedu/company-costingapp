@@ -1,81 +1,29 @@
-import { createClient } from '@supabase/supabase-js'
+/**
+ * Prints the SQL needed to set up the Company Costing App database.
+ * Paste the output into the Supabase SQL Editor — do not put secrets in this file.
+ *
+ * Official schema: supabase-setup.sql
+ * Incremental:     supabase-migration.sql
+ *
+ * Usage: node setup-supabase.js
+ */
 
-const SUPABASE_URL = 'https://jufozzefpxiqbpeajhiy.supabase.co'
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Zm96emVmcHhpcWJwZWFqaGl5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTYzNTE1OCwiZXhwIjoyMDkxMjExMTU4fQ.xq6iwEOrzPVEasaIM0mtXUmuLizhbcCVDylYCrPzppo'
+const fs = require('fs')
+const path = require('path')
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+const schemaPath = path.join(__dirname, 'supabase-setup.sql')
 
-async function setupDatabase() {
-  console.log('🚀 Starting Supabase database setup...\n')
+console.log('Company Costing App — Supabase setup instructions\n')
+console.log('1. Open your project: https://supabase.com/dashboard → SQL Editor → New Query')
+console.log('2. Paste the contents of supabase-setup.sql (shown below) and click Run')
+console.log('3. Confirm tables exist: expenses, recurring, settings, categories, currency_settings, projects')
+console.log('4. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env (see .env.example)\n')
+console.log('─'.repeat(60))
+console.log('')
 
-  try {
-    // SQL to create all tables
-    const createTablesSQL = `
-      CREATE TABLE IF NOT EXISTS expenses (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        amount NUMERIC NOT NULL,
-        currency TEXT NOT NULL,
-        date TEXT NOT NULL,
-        recurring_id TEXT,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS recurring (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        amount NUMERIC NOT NULL,
-        currency TEXT NOT NULL,
-        billing_day INTEGER NOT NULL,
-        active BOOLEAN DEFAULT TRUE,
-        notes TEXT,
-        end_date TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        company_name TEXT DEFAULT 'Company Costs',
-        tagline TEXT DEFAULT 'Cost tracking dashboard',
-        theme TEXT DEFAULT 'light',
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS categories (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        color TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS currency_settings (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        display_currency TEXT DEFAULT 'USD',
-        rates JSONB DEFAULT '{"USD": 1, "MYR": 0.22, "EUR": 1.08, "GBP": 1.27, "SGD": 0.74, "AUD": 0.65, "CAD": 0.73, "JPY": 0.0066}',
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `
-
-    console.log('📊 Creating all tables...')
-    console.log(createTablesSQL)
-    console.log('\n✅ SQL statements ready to execute!')
-    console.log('\n📍 Now paste this SQL into Supabase SQL Editor:')
-    console.log('1. Go to https://supabase.com/dashboard/project/jufozzefpxiqbpeajhiy/sql')
-    console.log('2. Click "New Query"')
-    console.log('3. Paste the SQL above')
-    console.log('4. Click "Run"')
-
-  } catch (error) {
-    console.error('❌ Error:', error.message)
-  }
+if (fs.existsSync(schemaPath)) {
+  console.log(fs.readFileSync(schemaPath, 'utf8'))
+} else {
+  console.error('Could not find supabase-setup.sql next to this script.')
+  process.exit(1)
 }
-
-setupDatabase()

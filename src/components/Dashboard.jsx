@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, RefreshCw, Package, CalendarDays, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, RefreshCw, Package, CalendarDays, X, Upload, Plus } from 'lucide-react'
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
-import { getMonthlyTotals, getCategoryTotals, getCategoryColor, filterExpenses, convertToDisplay, fmtCurrency } from '../data/store'
+import { getMonthlyTotals, getCategoryTotals, getProjectTotals, getCategoryColor, getProjectColor, filterExpenses, convertToDisplay, fmtCurrency } from '../data/store'
 
 const QUICK_RANGES = [
   { label: 'This month',  getRange: () => ({ from: format(startOfMonth(new Date()),'yyyy-MM-dd'), to: format(endOfMonth(new Date()),'yyyy-MM-dd') }) },
@@ -55,7 +55,34 @@ function StatCard({ label, value, sub, icon: Icon, trend, iconColor }) {
   )
 }
 
-export default function Dashboard({ expenses, recurring, categories, currencySettings }) {
+function ChartEmpty({ title, onImport, onAdd }) {
+  return (
+    <div className="h-52 flex flex-col items-center justify-center text-center px-4 gap-3">
+      <p className="text-sm" style={{ color: 'var(--text-2)' }}>{title}</p>
+      <p className="text-xs max-w-xs" style={{ color: 'var(--text-3)' }}>
+        {onImport || onAdd
+          ? 'Get started by importing your mastersheet or adding an expense.'
+          : <>Import via <strong style={{ color: 'var(--text-2)' }}>Expenses → Import</strong> or add an expense from the header.</>}
+      </p>
+      {(onImport || onAdd) && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {onImport && (
+            <button type="button" className="btn-primary text-xs gap-1.5" onClick={onImport}>
+              <Upload size={12} /> Import
+            </button>
+          )}
+          {onAdd && (
+            <button type="button" className="btn-ghost text-xs gap-1.5" onClick={onAdd}>
+              <Plus size={12} /> Add Expense
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function Dashboard({ expenses, recurring, categories, projects, currencySettings, onImport, onAdd }) {
   const { display } = currencySettings
   const defaultFrom = format(startOfMonth(subMonths(new Date(),5)),'yyyy-MM-dd')
   const defaultTo   = format(endOfMonth(new Date()),'yyyy-MM-dd')
@@ -73,6 +100,13 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
     return cats.map(c => ({ ...c, percent: total ? +((c.value/total)*100).toFixed(1) : 0 }))
   }, [filteredExpenses, currencySettings])
 
+  const projectTotals = useMemo(() => {
+    // Include Company-wide + every project that has spend in the selected period
+    const projs = getProjectTotals(filteredExpenses, currencySettings)
+    const total = projs.reduce((s, p) => s + p.value, 0)
+    return projs.map(p => ({ ...p, percent: total ? +((p.value / total) * 100).toFixed(1) : 0 }))
+  }, [filteredExpenses, currencySettings])
+
   const periodTotal = filteredExpenses.reduce((s,e) => s + convertToDisplay(e.amount, e.currency, currencySettings), 0)
 
   const thisMonthStr   = format(new Date(),'yyyy-MM')
@@ -83,9 +117,7 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
 
   const activeRecurring        = recurring.filter(r=>r.active)
   const activeMonthly          = activeRecurring.filter(r=>(r.frequency||'monthly')==='monthly')
-  const activeYearly           = activeRecurring.filter(r=>r.frequency==='yearly')
   const monthlyRecurringTotal  = activeMonthly.reduce((s,r)=>s+convertToDisplay(r.amount,r.currency,currencySettings),0)
-  const yearlyRecurringTotal   = activeYearly.reduce((s,r)=>s+convertToDisplay(r.amount,r.currency,currencySettings),0)
   const topCategory = categoryTotals[0]
 
   return (
@@ -113,13 +145,23 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      {/* Stats — 3 primary metrics + compact top category */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="This Month"      value={fmtCurrency(currentMonthTotal, display)}      sub={format(new Date(),'MMMM yyyy')}                                                   icon={DollarSign} trend={trend}  iconColor="#8b5cf6"/>
         <StatCard label="Recurring /mo"   value={fmtCurrency(monthlyRecurringTotal, display)}  sub={`${activeMonthly.length} active subscription${activeMonthly.length!==1?'s':''}`} icon={RefreshCw}               iconColor="#22c55e"/>
-        <StatCard label="Recurring /yr"   value={fmtCurrency(yearlyRecurringTotal, display)}   sub={`${activeYearly.length} active subscription${activeYearly.length!==1?'s':''}`}   icon={RefreshCw}               iconColor="#f59e0b"/>
-        <StatCard label="Top Category"    value={topCategory?.name??'—'}                       sub={topCategory?`${fmtCurrency(topCategory.value,display)} this period`:'No data'}    icon={Package}                 iconColor="#ec4899"/>
         <StatCard label="Period Total"    value={fmtCurrency(periodTotal, display)}             sub="Selected period"                                                                  icon={TrendingUp}               iconColor="#3b82f6"/>
+        <div className="card fade-in col-span-2 lg:col-span-1 opacity-90" style={{ background: 'var(--surface-2)' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg" style={{ background: '#ec489918' }}>
+              <Package size={13} style={{ color: '#ec4899' }} />
+            </div>
+            <p className="section-label">Top Category</p>
+          </div>
+          <p className="text-lg font-bold leading-tight truncate" style={{ color: 'var(--text-1)' }}>{topCategory?.name ?? '—'}</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+            {topCategory ? `${fmtCurrency(topCategory.value, display)} this period` : 'No spend in range'}
+          </p>
+        </div>
       </div>
 
       {/* Charts */}
@@ -127,7 +169,7 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
         <div className="card lg:col-span-2">
           <h3 className="font-semibold text-sm mb-4" style={{color:'var(--text-1)'}}>Monthly Spend <span className="text-xs font-normal ml-1" style={{color:'var(--text-3)'}}>({display})</span></h3>
           {monthlyTotals.length===0
-            ? <div className="h-52 flex items-center justify-center text-sm" style={{color:'var(--text-3)'}}>No data</div>
+            ? <ChartEmpty title="No spend in this period" onImport={onImport} onAdd={onAdd} />
             : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={monthlyTotals} barSize={22} barCategoryGap="30%">
@@ -149,7 +191,7 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
           <h3 className="font-semibold text-sm mb-0.5" style={{color:'var(--text-1)'}}>By Category</h3>
           <p className="text-xs mb-3" style={{color:'var(--text-3)'}}>Selected period ({display})</p>
           {categoryTotals.length===0
-            ? <div className="h-52 flex items-center justify-center text-sm" style={{color:'var(--text-3)'}}>No data</div>
+            ? <ChartEmpty title="No categories to chart yet" onImport={onImport} onAdd={onAdd} />
             : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -167,6 +209,25 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
         </div>
       </div>
 
+      {/* By project */}
+      {projectTotals.length > 0 && (
+        <div className="card">
+          <h3 className="font-semibold text-sm mb-4" style={{ color:'var(--text-1)' }}>Spend by Project <span className="text-xs font-normal ml-1" style={{ color:'var(--text-3)' }}>({display})</span></h3>
+          <div className="space-y-2">
+            {projectTotals.map(p => (
+              <div key={p.name} className="flex items-center gap-3">
+                <span className="text-xs font-medium w-28 truncate flex-shrink-0" style={{ color:'var(--text-2)' }}>{p.name}</span>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background:'var(--surface-2)' }}>
+                  <div className="h-full rounded-full transition-all" style={{ width:`${p.percent}%`, background: getProjectColor(p.name === 'Company-wide' ? null : p.name, projects) }} />
+                </div>
+                <span className="text-xs font-semibold tabular-nums w-24 text-right" style={{ color:'var(--text-1)' }}>{fmtCurrency(p.value, display)}</span>
+                <span className="text-xs w-10 text-right" style={{ color:'var(--text-3)' }}>{p.percent}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Recent */}
       <div className="card">
         <h3 className="font-semibold text-sm mb-4" style={{color:'var(--text-1)'}}>Recent Expenses</h3>
@@ -180,7 +241,7 @@ export default function Dashboard({ expenses, recurring, categories, currencySet
                 </div>
                 <div>
                   <p className="text-sm font-medium" style={{color:'var(--text-1)'}}>{e.name}</p>
-                  <p className="text-xs" style={{color:'var(--text-3)'}}>{e.date} · {e.category}</p>
+                  <p className="text-xs" style={{color:'var(--text-3)'}}>{e.date} · {e.category}{e.project ? ` · ${e.project}` : ''}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-right">

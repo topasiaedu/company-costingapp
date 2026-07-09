@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Save, Sun, Moon, Palette, Building2, RotateCcw, Plus, Trash2, GripVertical, DollarSign, Info } from 'lucide-react'
-import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES, CURRENCIES, fmtCurrency, genId } from '../data/store'
+import { Save, Sun, Moon, Palette, Building2, RotateCcw, Plus, Trash2, DollarSign, Info, Upload, FolderKanban } from 'lucide-react'
+import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES, DEFAULT_PROJECTS, CURRENCIES, fmtCurrency, genId } from '../data/store'
 
 // ── Category Manager ───────────────────────────────────────────────────────
 function CategoryManager({ categories, onSave }) {
@@ -67,6 +67,7 @@ function CategoryManager({ categories, onSave }) {
               style={{ color: 'var(--text-1)' }}
               value={cat.name}
               onChange={e => updateName(idx, e.target.value)}
+              list="settings-category-options"
             />
             <button
               className="btn-danger p-1 rounded-lg flex-shrink-0"
@@ -94,7 +95,11 @@ function CategoryManager({ categories, onSave }) {
           value={newName}
           onChange={e => setNewName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCat())}
+          list="settings-category-options"
         />
+        <datalist id="settings-category-options">
+          {cats.map(c => <option key={c.id} value={c.name} />)}
+        </datalist>
         <button className="btn-primary px-3 py-2 flex-shrink-0" onClick={addCat} disabled={!newName.trim()}>
           <Plus size={14} />
         </button>
@@ -183,8 +188,73 @@ function CurrencyManager({ currencySettings, onSave }) {
   )
 }
 
+// ── Project Manager ────────────────────────────────────────────────────────
+function ProjectManager({ projects, onSave }) {
+  const [projs, setProjs] = useState(() => projects.map(p => ({ id: p.id || genId('proj'), name: p.name, color: p.color })))
+  const [newName, setNewName] = useState('')
+  const [newColor, setNewColor] = useState('#3b82f6')
+  const [saved, setSaved] = useState(false)
+
+  function updateName(idx, val) { setProjs(prev => prev.map((p, i) => i === idx ? { ...p, name: val } : p)) }
+  function updateColor(idx, color) { setProjs(prev => prev.map((p, i) => i === idx ? { ...p, color } : p)) }
+  function removeProj(idx) { setProjs(prev => prev.filter((_, i) => i !== idx)) }
+
+  function addProj() {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    if (projs.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) return
+    setProjs(prev => [...prev, { id: genId('proj'), name: trimmed, color: newColor }])
+    setNewName(''); setNewColor('#3b82f6')
+  }
+
+  function handleSave() {
+    onSave(projs.filter(p => p.name.trim()))
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  function handleReset() {
+    const withIds = DEFAULT_PROJECTS.map(p => ({ id: genId('proj'), name: p.name, color: p.color }))
+    setProjs(withIds)
+    onSave(withIds)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        {projs.map((proj, idx) => (
+          <div key={proj.id} className="flex items-center gap-3 px-3 py-2 rounded-xl" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div className="relative flex-shrink-0">
+              <div className="w-6 h-6 rounded-lg cursor-pointer" style={{ background: proj.color }}
+                onClick={() => document.getElementById(`proj-color-${proj.id}`).click()} />
+              <input id={`proj-color-${proj.id}`} type="color" value={proj.color}
+                onChange={e => updateColor(idx, e.target.value)} className="absolute opacity-0 w-0 h-0" />
+            </div>
+            <input className="flex-1 text-sm font-medium bg-transparent border-none outline-none"
+              style={{ color: 'var(--text-1)' }} value={proj.name} onChange={e => updateName(idx, e.target.value)} />
+            <button className="btn-danger p-1 rounded-lg flex-shrink-0" style={{ border: 'none' }}
+              onClick={() => removeProj(idx)}><Trash2 size={12} /></button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <div className="w-8 h-8 rounded-lg cursor-pointer" style={{ background: newColor }}
+          onClick={() => document.getElementById('proj-color-new').click()} />
+        <input id="proj-color-new" type="color" value={newColor} onChange={e => setNewColor(e.target.value)} className="hidden" />
+        <input className="input flex-1" placeholder="New project name…" value={newName}
+          onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addProj())} />
+        <button className="btn-primary px-3 py-2" onClick={addProj} disabled={!newName.trim()}><Plus size={14} /></button>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button className="btn-primary text-xs gap-1.5" onClick={handleSave}><Save size={12} /> {saved ? 'Saved!' : 'Save Projects'}</button>
+        <button className="btn-ghost text-xs gap-1.5" onClick={handleReset}><RotateCcw size={12} /> Reset defaults</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Settings ──────────────────────────────────────────────────────────
-export default function Settings({ settings, onSave, onThemeChange, categories, onCategoriesSave, currencySettings, onCurrencySave }) {
+export default function Settings({ settings, onSave, onThemeChange, categories, onCategoriesSave, projects, onProjectsSave, currencySettings, onCurrencySave, onImport }) {
   const [form, setForm] = useState({ ...settings })
   const [saved, setSaved] = useState(false)
 
@@ -209,6 +279,11 @@ export default function Settings({ settings, onSave, onThemeChange, categories, 
 
   return (
     <div className="max-w-xl space-y-5 fade-in">
+
+      <div className="rounded-xl px-4 py-3 text-xs flex gap-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+        <Info size={13} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
+        <p>Each section below saves independently — click the Save button in that section when you are done editing.</p>
+      </div>
 
       {/* Appearance */}
       <div className="card">
@@ -261,6 +336,32 @@ export default function Settings({ settings, onSave, onThemeChange, categories, 
         <CategoryManager categories={categories} onSave={onCategoriesSave} />
       </div>
 
+      {/* Projects */}
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <FolderKanban size={14} style={{ color: 'var(--accent)' }} />
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Projects</h3>
+        </div>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-3)' }}>
+          Track tech spend per project (e.g. CAE, Dr Jasmine). Expenses without a project are company-wide.
+        </p>
+        <ProjectManager projects={projects} onSave={onProjectsSave} />
+      </div>
+
+      {/* Data & import */}
+      <div className="card space-y-3" style={{ border: '1px solid var(--accent)', background: 'var(--accent-dim)' }}>
+        <div className="flex items-center gap-2">
+          <Upload size={14} style={{ color: 'var(--accent)' }} />
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--text-1)' }}>Data & Import</h3>
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text-2)' }}>
+          Import your existing mastersheet CSV to bootstrap data. After that, manage everything here and use the P&L Report tab for reporting.
+        </p>
+        <button type="button" className="btn-primary text-xs gap-1.5 w-fit" onClick={onImport}>
+          <Upload size={12} /> Import Mastersheet CSV
+        </button>
+      </div>
+
       {/* Currency */}
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
@@ -270,10 +371,9 @@ export default function Settings({ settings, onSave, onThemeChange, categories, 
         <CurrencyManager currencySettings={currencySettings} onSave={onCurrencySave} />
       </div>
 
-      {/* Data note */}
       <div className="rounded-xl px-4 py-3 text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
         <p className="font-medium mb-1" style={{ color: 'var(--text-2)' }}>About your data</p>
-        <p>All data is stored locally in your browser. Nothing is sent to any server. Moving to a different browser or device will start fresh — cloud sync coming in the next version.</p>
+        <p>All data is stored in Supabase and synced to your account. Sign in from any device to access your expenses.</p>
       </div>
     </div>
   )

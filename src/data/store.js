@@ -30,11 +30,10 @@ export function getCategoryColor(name, categories) {
 }
 
 // ── Currency settings ──────────────────────────────────────────────────────
-// rates[X] = "how many display-currency units equals 1 X"
-// e.g. display=MYR, rates={ USD:4.47, MYR:1, EUR:5.20 }
+// rates[X] = how many MYR (display) per 1 unit of X — e.g. USD: 4.03 means $1 ≈ RM4.03
 export const DEFAULT_CURRENCY_SETTINGS = {
-  display: 'USD',
-  rates: { USD: 1, MYR: 0.22, EUR: 1.08, GBP: 1.27, SGD: 0.74, AUD: 0.65, CAD: 0.73, JPY: 0.0066 },
+  display: 'MYR',
+  rates: { USD: 4.03, MYR: 1, EUR: 4.35, GBP: 5.05, SGD: 3.0, AUD: 2.6, CAD: 2.9, JPY: 0.027 },
 }
 
 export function loadCurrencySettings() {
@@ -62,6 +61,14 @@ const CURRENCY_SYMBOLS = {
 export function fmtCurrency(amount, currency) {
   const sym = CURRENCY_SYMBOLS[currency] ?? (currency + ' ')
   return `${sym}${amount.toFixed(currency === 'JPY' ? 0 : 2)}`
+}
+
+/** Format a numeric amount with thousands separators, no currency symbol. */
+export function fmtAmount(amount, decimals = 2) {
+  return new Intl.NumberFormat('en-MY', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(amount)
 }
 
 // ── Default settings ───────────────────────────────────────────────────────
@@ -176,9 +183,10 @@ export function guessCategory(name) {
 
 // ── CSV export ─────────────────────────────────────────────────────────────
 export function exportToCSV(expenses, filename = 'expenses.csv') {
-  const headers = ['Date','Name','Category','Amount','Currency','Type','Notes']
+  const headers = ['Date','Name','Project','Category','Amount','Currency','Type','Notes']
   const rows = expenses.slice().sort((a,b)=>(b.date??'').localeCompare(a.date??'')).map(e => [
-    e.date, e.name, e.category, e.amount.toFixed(2), e.currency, e.recurringId?'Recurring':'One-off', e.notes??'',
+    e.date, e.name, e.project || 'Company-wide', e.category, e.amount.toFixed(2), e.currency,
+    e.expenseType || (e.recurringId ? 'subscription' : 'one-time'), e.notes??'',
   ])
   const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
   const blob = new Blob([csv],{type:'text/csv'})
@@ -190,3 +198,101 @@ export function exportToCSV(expenses, filename = 'expenses.csv') {
 export const CURRENCIES = ['USD','MYR','EUR','GBP','SGD','AUD','CAD','JPY']
 // Convenience flat list of category names (derived from DEFAULT_CATEGORIES)
 export const CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name)
+
+// ── Projects ───────────────────────────────────────────────────────────────
+export const SHARED_PROJECT = null
+
+export const DEFAULT_PROJECTS = [
+  { name: 'CAE', color: '#3b82f6' },
+  { name: 'Dr Jasmine', color: '#ec4899' },
+  { name: 'Jeff', color: '#f59e0b' },
+]
+
+export const EXPENSE_TYPES = {
+  SUBSCRIPTION: 'subscription',
+  ONE_TIME: 'one-time',
+  CREDIT_RELOAD: 'credit-reload',
+}
+
+/** P&L report: spread yearly subs monthly vs show cash on invoice date */
+export const PNL_VIEW_MODES = {
+  AMORTIZED: 'amortized',
+  CASH: 'cash',
+}
+
+export const EXPENSE_NOTE_AMORTIZED = 'Amortized annual fee'
+export const EXPENSE_NOTE_ANNUAL_INVOICE = 'Annual invoice'
+
+/**
+ * Resolve top-level recurring id for grouping add-ons under a parent subscription.
+ * @param {string|null} recurringId
+ * @param {object[]} recurringList
+ */
+export function resolveRecurringGroupId(recurringId, recurringList) {
+  if (!recurringId) return null
+  const byId = new Map(recurringList.map((r) => [r.id, r]))
+  let current = byId.get(recurringId)
+  let guard = 0
+  while (current?.parentId && guard < 8) {
+    current = byId.get(current.parentId)
+    guard++
+  }
+  return current?.id ?? recurringId
+}
+
+/**
+ * Group recurring templates: parents (no parentId) with nested add-ons.
+ * @param {object[]} recurringList
+ */
+export function groupRecurringItems(recurringList) {
+  const childrenByParent = {}
+  for (const item of recurringList) {
+    if (!item.parentId) continue
+    if (!childrenByParent[item.parentId]) childrenByParent[item.parentId] = []
+    childrenByParent[item.parentId].push(item)
+  }
+  const parents = recurringList.filter((r) => !r.parentId)
+  const orphans = recurringList.filter(
+    (r) => r.parentId && !recurringList.some((p) => p.id === r.parentId)
+  )
+  return { parents, childrenByParent, orphans }
+}
+
+export function expenseTypeLabel(type) {
+  if (type === EXPENSE_TYPES.CREDIT_RELOAD) return 'Credit reload'
+  if (type === EXPENSE_TYPES.ONE_TIME) return 'One-time'
+  if (type === EXPENSE_TYPES.SUBSCRIPTION) return 'Subscription'
+  return 'One-off'
+}
+
+export function getProjectColor(name, projects) {
+  if (!name) return '#64748b'
+  return projects?.find(p => p.name === name)?.color ?? '#64748b'
+}
+
+export function getProjectTotals(expenses, currencySettings) {
+  const map = {}
+  for (const e of expenses) {
+    const key = e.project || 'Company-wide'
+    const converted = convertToDisplay(e.amount, e.currency, currencySettings)
+    map[key] = (map[key] || 0) + converted
+  }
+  return Object.entries(map)
+    .map(([name, value]) => ({ name, value: +value.toFixed(2) }))
+    .sort((a, b) => b.value - a.value)
+}
+
+export function getMonthlyTotalsByProject(expenses, year, currencySettings) {
+  const months = []
+  for (let m = 0; m < 12; m++) {
+    const ym = `${year}-${String(m + 1).padStart(2, '0')}`
+    const byProject = {}
+    for (const e of expenses) {
+      if (!e.date?.startsWith(ym)) continue
+      const key = e.project || 'Company-wide'
+      byProject[key] = (byProject[key] || 0) + convertToDisplay(e.amount, e.currency, currencySettings)
+    }
+    months.push({ month: ym, label: format(new Date(year, m, 1), 'MMM'), byProject })
+  }
+  return months
+}
