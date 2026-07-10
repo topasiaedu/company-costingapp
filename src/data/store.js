@@ -165,12 +165,12 @@ export function getCategoryTotals(expenses, currencySettings) {
 
 // ── Auto-categorize ────────────────────────────────────────────────────────
 const KEYWORD_MAP = [
-  ['AI Tools',       ['claude','chatgpt','openai','gemini','copilot','midjourney','anthropic','gpt','perplexity','bard','mistral','stability','runway','elevenlabs','jasper','writesonic','grammarly']],
+  ['AI Tools',       ['claude','chatgpt','openai','gemini','copilot','midjourney','anthropic','gpt','perplexity','bard','mistral','stability','runway','elevenlabs','jasper','writesonic','grammarly','artemo','freepik']],
   ['Productivity',   ['zoom','notion','slack','teams','asana','monday','trello','todoist','google workspace','gsuite','office 365','microsoft 365','loom','calendly','clickup','airtable','basecamp','coda']],
-  ['Development',    ['github','gitlab','bitbucket','jira','linear','vercel','netlify','heroku','sentry','datadog','postman','retool','supabase','planetscale','railway','render','circleci']],
+  ['Development',    ['github','gitlab','bitbucket','jira','linear','vercel','netlify','heroku','sentry','datadog','postman','retool','supabase','planetscale','railway','render','circleci','cursor']],
   ['Infrastructure', ['aws','azure','gcp','google cloud','digitalocean','cloudflare','linode','vultr','hetzner','upstash','neon']],
   ['Design',         ['figma','canva','adobe','sketch','zeplin','invision','framer','remove.bg','lottie']],
-  ['Marketing',      ['mailchimp','hubspot','ahrefs','semrush','buffer','hootsuite','convertkit','beehiiv','klaviyo','intercom','mixpanel','amplitude','hotjar']],
+  ['Marketing',      ['mailchimp','hubspot','ahrefs','semrush','buffer','hootsuite','convertkit','beehiiv','klaviyo','intercom','mixpanel','amplitude','hotjar','automatic sales','as credits','waba']],
   ['Finance',        ['quickbooks','xero','stripe','paypal','wise','brex','mercury','freshbooks','expensify']],
   ['HR',             ['bamboohr','gusto','rippling','workday','deel','remote.com','lattice']],
 ]
