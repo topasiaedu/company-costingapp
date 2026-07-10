@@ -8,6 +8,8 @@ ALTER TABLE recurring ADD COLUMN IF NOT EXISTS parent_id TEXT;
 
 -- Link add-on subscriptions to a parent (e.g. WABA under Automatic Sales)
 
+ALTER TABLE recurring ADD COLUMN IF NOT EXISTS skipped_months JSONB DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,

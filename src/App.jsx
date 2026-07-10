@@ -13,7 +13,7 @@ import ResetPassword from './components/ResetPassword'
 import ResetPasswordForm from './components/ResetPasswordForm'
 import ImportModal from './components/ImportModal'
 import ProjectPnl from './components/ProjectPnl'
-import { genId, DEFAULT_CATEGORIES, DEFAULT_CURRENCY_SETTINGS, DEFAULT_SETTINGS, DEFAULT_PROJECTS, EXPENSE_TYPES, EXPENSE_NOTE_ANNUAL_INVOICE } from './data/store'
+import { genId, DEFAULT_CATEGORIES, DEFAULT_CURRENCY_SETTINGS, DEFAULT_SETTINGS, DEFAULT_PROJECTS, EXPENSE_TYPES, EXPENSE_NOTE_ANNUAL_INVOICE, isDomainParent } from './data/store'
 import {
   isSupabaseConfigured,
   getCurrentUser, signOut,
@@ -28,28 +28,57 @@ import {
 } from './data/supabase'
 
 // Auto-generate this month's expenses for active recurring items
+function createRecurringExpense(r, ym) {
+  const freq = r.frequency || 'monthly'
+  const day = String(r.billingDay || 1).padStart(2, '0')
+  const dateStr = `${ym}-${day}`
+  const notes = freq === 'yearly' ? EXPENSE_NOTE_ANNUAL_INVOICE : (r.notes ?? '')
+  return {
+    id: genId('e'),
+    name: r.name,
+    category: r.category,
+    amount: r.amount,
+    currency: r.currency,
+    date: dateStr,
+    project: r.project || null,
+    expenseType: EXPENSE_TYPES.SUBSCRIPTION,
+    recurringId: r.id,
+    notes,
+  }
+}
+
+function findRecurringExpense(expenses, recurringId, r, ym) {
+  const freq = r.frequency || 'monthly'
+  const year = ym.slice(0, 4)
+  return expenses.find((e) => {
+    if (e.recurringId !== recurringId) return false
+    return freq === 'yearly' ? e.date?.startsWith(year) : e.date?.startsWith(ym)
+  })
+}
+
+function shouldAutoGenerate(r, ym) {
+  if (!r.active) return false
+  if (isDomainParent(r)) return false
+  if (!r.amount || Number(r.amount) <= 0) return false
+  if (r.endDate && r.endDate < `${ym}-01`) return false
+  const skippedMonths = r.skippedMonths || []
+  if (skippedMonths.includes(ym)) return false
+  const currentMonth = parseInt(ym.slice(5, 7), 10)
+  const freq = r.frequency || 'monthly'
+  if (freq === 'yearly' && (r.billingMonth || 1) !== currentMonth) return false
+  return true
+}
+
 function applyRecurring(expenses, recurring) {
-  const now          = new Date()
-  const ym           = format(now, 'yyyy-MM')
-  const currentMonth = now.getMonth() + 1  // 1-12
+  const now = new Date()
+  const ym = format(now, 'yyyy-MM')
   let changed = false
   const result = [...expenses]
   for (const r of recurring) {
-    if (!r.active) continue
-    if (!r.amount || Number(r.amount) <= 0) continue
-    if (r.endDate && r.endDate < `${ym}-01`) continue
-    const freq = r.frequency || 'monthly'
-    // Yearly items only generate in their billing month
-    if (freq === 'yearly' && (r.billingMonth || 1) !== currentMonth) continue
-    const day     = String(r.billingDay || 1).padStart(2, '0')
-    const dateStr = `${ym}-${day}`
-    const year    = ym.slice(0, 4)
-    const alreadyBilled = freq === 'yearly'
-      ? result.some(e => e.recurringId === r.id && e.date?.startsWith(year))
-      : result.some(e => e.recurringId === r.id && e.date?.startsWith(ym))
+    if (!shouldAutoGenerate(r, ym)) continue
+    const alreadyBilled = findRecurringExpense(result, r.id, r, ym) !== undefined
     if (!alreadyBilled) {
-      const notes = freq === 'yearly' ? EXPENSE_NOTE_ANNUAL_INVOICE : (r.notes ?? '')
-      result.push({ id: genId('e'), name: r.name, category: r.category, amount: r.amount, currency: r.currency, date: dateStr, project: r.project || null, expenseType: EXPENSE_TYPES.SUBSCRIPTION, recurringId: r.id, notes })
+      result.push(createRecurringExpense(r, ym))
       changed = true
     }
   }
@@ -277,26 +306,22 @@ export default function App() {
   // ── Recurring ────────────────────────────────────────────────────
   const handleRecurringAdd = useCallback(async (item) => {
     if (!user) return
-    setRecurring(prev => [...prev, item])
-    // Auto-generate this month's expense only if applicable
-    const freq         = item.frequency || 'monthly'
-    const currentMonth = new Date().getMonth() + 1
-    const shouldGenerate = freq === 'monthly' || (freq === 'yearly' && (item.billingMonth || 1) === currentMonth)
+    const withDefaults = { skippedMonths: [], ...item }
+    setRecurring(prev => [...prev, withDefaults])
+    const ym = format(new Date(), 'yyyy-MM')
     let newExp = null
-    if (shouldGenerate) {
-      const ym  = format(new Date(), 'yyyy-MM')
-      const day = String(item.billingDay || 1).padStart(2, '0')
-      const notes = freq === 'yearly' ? EXPENSE_NOTE_ANNUAL_INVOICE : (item.notes ?? '')
-      newExp = { id: genId('e'), name: item.name, category: item.category, amount: item.amount, currency: item.currency, project: item.project || null, expenseType: EXPENSE_TYPES.SUBSCRIPTION, date: `${ym}-${day}`, recurringId: item.id, notes }
-      setExpenses(prev => [...prev, newExp])
+    if (shouldAutoGenerate(withDefaults, ym)) {
+      const existing = findRecurringExpense(expenses, withDefaults.id, withDefaults, ym)
+      if (!existing) newExp = createRecurringExpense(withDefaults, ym)
+      if (newExp) setExpenses(prev => [...prev, newExp])
     }
     doSave(async () => {
-      const r1 = await saveOneRecurring(item, user.id)
+      const r1 = await saveOneRecurring(withDefaults, user.id)
       if (r1.error) return r1
       if (newExp) return saveExpense(newExp, user.id)
       return { error: null }
     })
-  }, [user, doSave])
+  }, [user, doSave, expenses])
 
   const handleRecurringUpdate = useCallback(async (item) => {
     if (!user) return
@@ -322,19 +347,117 @@ export default function App() {
     })
   }, [user, doSave, recurring, askConfirm])
 
-  const handleRecurringToggle = useCallback(async (id) => {
+  const handleRecurringPause = useCallback(async (id) => {
     if (!user) return
-    let toggled
-    setRecurring(prev => {
-      const updated = prev.map(r => r.id === id ? { ...r, active: !r.active } : r)
-      toggled = updated.find(r => r.id === id)
-      return updated
+    const item = recurring.find(r => r.id === id)
+    if (!item) return
+    const updated = { ...item, active: false }
+    setRecurring(prev => prev.map(r => r.id === id ? updated : r))
+    doSave(() => saveOneRecurring(updated, user.id))
+  }, [user, doSave, recurring])
+
+  const handleRecurringResume = useCallback(async (id) => {
+    if (!user) return
+    const item = recurring.find(r => r.id === id)
+    if (!item) return
+    const ym = format(new Date(), 'yyyy-MM')
+    const updated = { ...item, active: true }
+    let newExp = null
+    if (shouldAutoGenerate(updated, ym)) {
+      const existing = findRecurringExpense(expenses, id, item, ym)
+      if (!existing) newExp = createRecurringExpense(updated, ym)
+    }
+    setRecurring(prev => prev.map(r => r.id === id ? updated : r))
+    if (newExp) setExpenses(prev => [...prev, newExp])
+    doSave(async () => {
+      const r1 = await saveOneRecurring(updated, user.id)
+      if (r1.error) return r1
+      if (newExp) return saveExpense(newExp, user.id)
+      return { error: null }
     })
-    // Wait for state update, then save
-    setTimeout(() => {
-      if (toggled) doSave(() => saveOneRecurring(toggled, user.id))
-    }, 0)
-  }, [user, doSave])
+  }, [user, doSave, recurring, expenses])
+
+  const handleRecurringBillMonth = useCallback(async (id, billThisMonth) => {
+    if (!user) return
+    const item = recurring.find(r => r.id === id)
+    if (!item) return
+    const ym = format(new Date(), 'yyyy-MM')
+    let skippedMonths = [...(item.skippedMonths || [])]
+    if (billThisMonth) {
+      skippedMonths = skippedMonths.filter(m => m !== ym)
+    } else if (!skippedMonths.includes(ym)) {
+      skippedMonths.push(ym)
+    }
+    const updated = { ...item, skippedMonths, active: true }
+
+    let newExp = null
+    let expenseToDelete = null
+
+    if (billThisMonth) {
+      if (shouldAutoGenerate(updated, ym)) {
+        const existing = findRecurringExpense(expenses, id, item, ym)
+        if (!existing) newExp = createRecurringExpense(updated, ym)
+      }
+    } else {
+      const existing = findRecurringExpense(expenses, id, item, ym)
+      if (existing) expenseToDelete = existing.id
+    }
+
+    setRecurring(prev => prev.map(r => r.id === id ? updated : r))
+    if (newExp) setExpenses(prev => [...prev, newExp])
+    if (expenseToDelete) setExpenses(prev => prev.filter(e => e.id !== expenseToDelete))
+
+    doSave(async () => {
+      const r1 = await saveOneRecurring(updated, user.id)
+      if (r1.error) return r1
+      if (expenseToDelete) {
+        const r2 = await deleteExpense(expenseToDelete)
+        if (r2.error) return r2
+      }
+      if (newExp) return saveExpense(newExp, user.id)
+      return { error: null }
+    })
+  }, [user, doSave, recurring, expenses])
+
+  const handleRecurringBulkSkip = useCallback(async (ids) => {
+    if (!user || ids.length === 0) return
+    const ym = format(new Date(), 'yyyy-MM')
+    const updatedItems = []
+    const expenseIdsToDelete = []
+
+    for (const id of ids) {
+      const item = recurring.find((r) => r.id === id)
+      if (!item) continue
+      const skippedMonths = [...(item.skippedMonths || [])]
+      if (!skippedMonths.includes(ym)) skippedMonths.push(ym)
+      updatedItems.push({ ...item, skippedMonths, active: true })
+
+      const existing = findRecurringExpense(expenses, id, item, ym)
+      if (existing) expenseIdsToDelete.push(existing.id)
+    }
+
+    if (updatedItems.length === 0) return
+
+    setRecurring((prev) => prev.map((r) => {
+      const updated = updatedItems.find((u) => u.id === r.id)
+      return updated || r
+    }))
+    if (expenseIdsToDelete.length > 0) {
+      setExpenses((prev) => prev.filter((e) => !expenseIdsToDelete.includes(e.id)))
+    }
+
+    doSave(async () => {
+      for (const item of updatedItems) {
+        const r1 = await saveOneRecurring(item, user.id)
+        if (r1.error) return r1
+      }
+      for (const expId of expenseIdsToDelete) {
+        const r2 = await deleteExpense(expId)
+        if (r2.error) return r2
+      }
+      return { error: null }
+    })
+  }, [user, doSave, recurring, expenses])
 
   // ── Import ──────────────────────────────────────────────────────
   const handleImport = useCallback(async ({ expenses: newExpenses, recurring: newRecurring, mode }) => {
@@ -522,7 +645,7 @@ export default function App() {
           {tab==='dashboard' && <Dashboard expenses={expenses} recurring={recurring} categories={categories} projects={projects} currencySettings={currencySettings} onImport={()=>setImportModal(true)} onAdd={()=>setExpenseModal('add')}/>}
           {tab==='expenses'  && <ExpensesTable expenses={expenses} recurring={recurring} projects={projects} onAdd={()=>setExpenseModal('add')} onEdit={e=>setExpenseModal(e)} onDelete={handleExpenseDelete} onImport={()=>setImportModal(true)} categories={categories} currencySettings={currencySettings}/>}
           {tab==='pnl'       && <ProjectPnl expenses={expenses} recurring={recurring} projects={projects} currencySettings={currencySettings} onImport={()=>setImportModal(true)} onAdd={()=>setExpenseModal('add')}/>}
-              {tab==='subscriptions' && <RecurringManager recurring={recurring} onAdd={handleRecurringAdd} onUpdate={handleRecurringUpdate} onDelete={handleRecurringDelete} onToggle={handleRecurringToggle} categories={categories} projects={projects} currencySettings={currencySettings}/>}
+              {tab==='subscriptions' && <RecurringManager recurring={recurring} expenses={expenses} onAdd={handleRecurringAdd} onUpdate={handleRecurringUpdate} onDelete={handleRecurringDelete} onBillMonth={handleRecurringBillMonth} onBulkSkipDue={handleRecurringBulkSkip} onPause={handleRecurringPause} onResume={handleRecurringResume} askConfirm={askConfirm} categories={categories} projects={projects} currencySettings={currencySettings}/>}
               {tab==='settings'  && <Settings settings={settings} onSave={handleSettingsSave} onThemeChange={handleThemeChange} categories={categories} onCategoriesSave={handleCategoriesSave} projects={projects} onProjectsSave={handleProjectsSave} currencySettings={currencySettings} onCurrencySave={handleCurrencySave} onImport={()=>setImportModal(true)}/>}
             </>
           )}

@@ -207,4 +207,120 @@ If UI looks stale, restart the Vite dev server (old processes can serve outdated
 
 ---
 
+## Subscriptions upgrade (Agent 1)
+
+**Date:** 10 July 2026  
+**Scope:** Schema + billing logic + expense sync (no UI redesign)
+
+### Implemented
+
+- **`skipped_months` column** on `recurring` (JSONB array of `YYYY-MM` strings), mapped ↔ `skippedMonths` in `supabase.js`.
+- **Billing model split:** `active` = long-term pause; per-month skip tracked in `skippedMonths` (separate from pause).
+- **`store.js` helpers:** `isDomainParent`, `isDomainChild`, `isDueInMonth`, `getBillingStatus`.
+- **`applyRecurring()`** respects `skippedMonths`, `active === false`, domain parent shells (`r_domains_*`), zero-amount rows, yearly billing month, and end dates.
+- **New App.jsx handlers:** `handleRecurringPause`, `handleRecurringResume`, `handleRecurringBillMonth` (creates/deletes current-period expense + persists skip list). `handleRecurringToggle` now delegates to pause/resume for backward compatibility.
+- **RecurringManager minimal tweak:** toggle calls `onBillMonth` for active due/billed/skipped rows; tooltips say “Bill this month” / “Skip this month”; paused rows use `onResume`; `expenses` prop passed for `getBillingStatus`.
+
+### Manual step
+
+Run `supabase-migration.sql` (or the `add_recurring_skipped_months` migration) on any DB not yet migrated.
+
+### Blockers for Agent 2
+
+- None on data layer. Agent 2 can import `getBillingStatus`, `isDueInMonth` from `store.js` and use `expenses` + `recurring` already wired in `App.jsx`.
+- Run-rate helpers (`monthlyEquivalent`, `getSubscriptionRunRates`, `listDueThisMonth`) are **not** added yet — Agent 2 should add per plan §6.
+- Summary cards and view tabs unchanged; “On/Off” pill labels remain until Agent 3.
+
+---
+
+## Subscriptions upgrade (Agent 2)
+
+**Date:** 10 July 2026  
+**Scope:** Summary cards + month header + run-rate helpers (no view tabs or filters)
+
+### Implemented
+
+- **`store.js` run-rate helpers:** `monthlyEquivalent`, `getSubscriptionRunRates`, `getThisMonthStats`.
+  - Run rates include active subs only; domain parent shells (`r_domains_*`) excluded; domain children and add-ons included.
+  - Yearly subs normalized as amount ÷ 12 in display currency.
+  - This-month stats use `getBillingStatus` for due / billed / skipped counts and sum display-currency amounts for items still due.
+- **`RecurringManager.jsx` summary cards** replaced misleading Monthly Cost / Yearly Cost / Active cards with **Monthly run rate**, **Annual run rate**, and **This month** (counts + due amount).
+- **Page subheader** under title: `{Month YYYY} · N due · M billed` (+ skipped when &gt; 0).
+- **Info banner** shortened to describe bill-this-month vs long-term pause.
+- **Button** renamed to **Add subscription** (modal titles unchanged for Agent 3).
+
+### Blockers for Agent 3
+
+- None on helpers or stats. Agent 3 can import `getThisMonthStats`, `getBillingStatus`, `isDueInMonth` and add `listDueThisMonth` if needed for the This month tab.
+- “This month” card uses count string as primary value (may need smaller type when Agent 3 adds denser layout).
+- Row On/Off pills and modal “Add Recurring” copy still pending Agent 3.
+
+---
+
+## Subscriptions upgrade (Agent 3)
+
+**Date:** 10 July 2026  
+**Scope:** This month / All subscriptions view tabs + simplified rows + distinct skip vs pause controls
+
+### Implemented
+
+- **View tabs** below summary cards: **This month** (default) and **All subscriptions** (`useState` in `RecurringManager`).
+- **This month view:** lists subs with `getBillingStatus` of due, billed, or skipped; domain children grouped under collapsible Domains when any qualify; sorted by billing day ascending via `buildThisMonthGroups`.
+- **All subscriptions view:** full catalog with active + **Paused / cancelled** sections; includes not-due yearly subs; existing parent/add-on/domain grouping preserved.
+- **Simplified rows:** subtitle shows `{category} · {billing date}` only; end date shown only when set; removed ∞ Infinite badge and “No end date” text.
+- **Status badges:** Billed (green), Due (amber), Skipped / Paused (gray), Not due (muted).
+- **Billing date format:** monthly → `Jul 25`; yearly → `Jul 1 · yearly`.
+- **Bill this month** toggle (switch) on due/billed/skipped rows in This month view (and All view when status qualifies); calls `onBillMonth`. Domain group parent has no bill toggle.
+- **Pause / Resume** icon buttons in All view only; long-term toggle via `onPause` / `onResume` — separate from skip-month.
+- **Modal titles:** Add subscription / Edit subscription / Add domain / Edit domain.
+- **Removed** dead `onToggle` prop from `RecurringManager` and `App.jsx` wiring.
+
+### Blockers for Agent 4
+
+- None on view tabs or row actions. Agent 4 can add search/filter/sort to **All subscriptions** view and domains search-within when expanded.
+- Filter bar should respect `viewTab === 'all'` (or optionally also filter This month list).
+- Domain group `+ Add domain` and expand/collapse already work; Agent 4 adds search-within-children when expanded.
+
+---
+
+## Subscriptions upgrade (Agent 4)
+
+**Date:** 10 July 2026  
+**Scope:** Search, filter, sort (All view) + domains group UX polish + empty states
+
+### Implemented
+
+- **Filter bar** on **All subscriptions** tab: search (name), category, project, status (Active/Paused), sort (Name A–Z, Cost high→low, Billing day). Client-side on loaded `recurring`; filters combine with AND logic.
+- **This month** tab shows search only; filters apply to the visible due/billed/skipped list.
+- **Grouping preserved:** parent match shows full child set; child-only match shows parent group with matching children only. Add-ons stay under parents after filter/sort.
+- **Sort by cost** uses `monthlyEquivalent` in display currency (yearly subs ÷ 12, FX via `convertToDisplay`).
+- **Domains group polish:** parent subtitle shows `{monthly}/mo · N domains · M active`; compact **Search domains** input when expanded (filters children by name or project); empty state **No domains match**. Child rows keep status badges and bill-month toggle from Agent 3.
+- **Empty states:** All view with no filter matches → message + **Clear filters**; This month empty → **No subscriptions bill this month** + link to All subscriptions (or clear search when search active).
+
+### Blockers for Agent 5
+
+- None on filters or domains UX. Agent 5 can add duplicate, export CSV, upcoming renewals, and bulk skip-month on top of the filtered All view.
+- `RecurringManager` already receives full `recurring` and `expenses` — export/duplicate can use the same array; bulk skip should respect `getBillingStatus` + `onBillMonth` patterns from Agent 1.
+- Filter state is local (`useState`); Agent 5 does not need to change it unless bulk actions should apply to filtered subset only (recommended: act on filtered visible due items).
+
+---
+
+## Subscriptions upgrade (Agent 5)
+
+**Date:** 10 July 2026  
+**Scope:** QoL — duplicate, export CSV, upcoming renewals, bulk skip month
+
+### Implemented
+
+- **Duplicate subscription** — Copy icon on each row in **All subscriptions** view (not on Domains group parent). Creates new item via `onAdd` with `genId('r')` or `genId('r_domain_')`, name suffix ` (copy)`, `skippedMonths: []`; no expenses copied.
+- **Export CSV** — **Export CSV** button in page header; flat list via `exportSubscriptionsToCSV()` in `store.js` (excludes `r_domains_*` shells). Columns: name, category, project, amount, currency, frequency, billing_day, billing_month, active, notes. Filename: `subscriptions-YYYY-MM-DD.csv`.
+- **Upcoming renewals** — **Upcoming (30 days)** card below summary cards; `getUpcomingRenewals()` lists active subs whose billing date (billingDay in current or next calendar month) falls within 30 days; shows name, date, amount; capped at 10 with “+ N more”.
+- **Bulk skip this month** — **Skip all unbilled** in This month view when `dueCount > 0`; confirm via `askConfirm`; `handleRecurringBulkSkip` in `App.jsx` adds current `YYYY-MM` to `skippedMonths` for each due item, deletes any existing expense, batch-saves. Acts on filtered visible due items in This month list.
+
+### Blockers
+
+- None. Subscriptions upgrade (Agents 1–5) is complete per plan §4.8 and §10.
+
+---
+
 *This document supersedes informal chat decisions for the topics above. Update it when subscription amounts, domain inventory, or business rules change.*

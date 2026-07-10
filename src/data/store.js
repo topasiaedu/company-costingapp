@@ -1,4 +1,4 @@
-import { format, addMonths, startOfMonth, parseISO } from 'date-fns'
+import { format, addMonths, addDays, startOfMonth, parseISO } from 'date-fns'
 
 const EXPENSES_KEY   = 'cc_expenses'
 const RECURRING_KEY  = 'cc_recurring'
@@ -195,6 +195,35 @@ export function exportToCSV(expenses, filename = 'expenses.csv') {
   a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url)
 }
 
+/** Flat CSV export of subscription templates (excludes domain parent shells). */
+export function exportSubscriptionsToCSV(recurring, filename = 'subscriptions.csv') {
+  const headers = ['name', 'category', 'project', 'amount', 'currency', 'frequency', 'billing_day', 'billing_month', 'active', 'notes']
+  const rows = recurring
+    .filter((r) => !isDomainParent(r))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((r) => [
+      r.name,
+      r.category,
+      r.project || 'Company-wide',
+      Number(r.amount || 0).toFixed(2),
+      r.currency,
+      r.frequency || 'monthly',
+      r.billingDay ?? 1,
+      r.billingMonth ?? 1,
+      r.active !== false ? 'true' : 'false',
+      r.notes ?? '',
+    ])
+  const csv = [headers, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export const CURRENCIES = ['USD','MYR','EUR','GBP','SGD','AUD','CAD','JPY']
 // Convenience flat list of category names (derived from DEFAULT_CATEGORIES)
 export const CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name)
@@ -228,6 +257,185 @@ export const PNL_LAYOUT_MODES = {
 
 export const EXPENSE_NOTE_AMORTIZED = 'Amortized annual fee'
 export const EXPENSE_NOTE_ANNUAL_INVOICE = 'Annual invoice'
+
+/** Synthetic domain group parent rows (amount 0 shells, not billed directly). */
+export function isDomainParent(item) {
+  return !!item?.id?.startsWith('r_domains_')
+}
+
+/** Individual domain subscription rows. */
+export function isDomainChild(item) {
+  return !!item?.id?.startsWith('r_domain_') && !item?.id?.startsWith('r_domains_')
+}
+
+/**
+ * Whether a recurring template bills in the given YYYY-MM period.
+ * Monthly: always due; yearly: only when billingMonth matches that month.
+ * @param {object} recurringItem
+ * @param {string} yearMonth - "YYYY-MM"
+ */
+export function isDueInMonth(recurringItem, yearMonth) {
+  const freq = recurringItem.frequency || 'monthly'
+  if (freq === 'monthly') return true
+  const month = parseInt(yearMonth.slice(5, 7), 10)
+  return (recurringItem.billingMonth || 1) === month
+}
+
+/**
+ * Billing status for the current calendar month (or `now`).
+ * @param {object} recurringItem
+ * @param {object[]} expenses
+ * @param {Date} [now]
+ * @returns {{ status: 'billed'|'due'|'skipped'|'not-due'|'paused', expenseId?: string, dueDate?: string }}
+ */
+export function getBillingStatus(recurringItem, expenses, now = new Date()) {
+  const ym = format(now, 'yyyy-MM')
+  const year = ym.slice(0, 4)
+  const freq = recurringItem.frequency || 'monthly'
+  const skippedMonths = recurringItem.skippedMonths || []
+  const day = String(recurringItem.billingDay || 1).padStart(2, '0')
+  const dueDate = `${ym}-${day}`
+
+  if (!recurringItem.active) {
+    return { status: 'paused' }
+  }
+
+  if (skippedMonths.includes(ym)) {
+    return { status: 'skipped', dueDate }
+  }
+
+  const matchingExpense = expenses.find((e) => {
+    if (e.recurringId !== recurringItem.id) return false
+    if (freq === 'yearly') return e.date?.startsWith(year)
+    return e.date?.startsWith(ym)
+  })
+
+  if (matchingExpense) {
+    return { status: 'billed', expenseId: matchingExpense.id, dueDate }
+  }
+
+  if (recurringItem.endDate && recurringItem.endDate < `${ym}-01`) {
+    return { status: 'not-due' }
+  }
+
+  if (!isDueInMonth(recurringItem, ym)) {
+    return { status: 'not-due' }
+  }
+
+  return { status: 'due', dueDate }
+}
+
+/**
+ * Monthly equivalent of a recurring item in display currency.
+ * Yearly amounts are divided by 12; monthly amounts are used as-is.
+ * @param {object} item
+ * @param {object} currencySettings
+ */
+export function monthlyEquivalent(item, currencySettings) {
+  const amount = convertToDisplay(Number(item.amount) || 0, item.currency, currencySettings)
+  const freq = item.frequency || 'monthly'
+  return freq === 'yearly' ? amount / 12 : amount
+}
+
+/**
+ * Normalized run rates for active subscriptions (display currency).
+ * Excludes domain parent shells; includes domain children, add-ons, and standalone subs.
+ * @param {object[]} recurring
+ * @param {object} currencySettings
+ * @returns {{ monthly: number, annual: number }}
+ */
+export function getSubscriptionRunRates(recurring, currencySettings) {
+  let monthly = 0
+  for (const item of recurring) {
+    if (item.active === false) continue
+    if (isDomainParent(item)) continue
+    monthly += monthlyEquivalent(item, currencySettings)
+  }
+  return { monthly, annual: monthly * 12 }
+}
+
+/**
+ * Billing summary for the current calendar month.
+ * @param {object[]} recurring
+ * @param {object[]} expenses
+ * @param {object} currencySettings
+ * @param {Date} [now]
+ * @returns {{ dueCount: number, billedCount: number, skippedCount: number, dueAmount: number, monthLabel: string }}
+ */
+export function getThisMonthStats(recurring, expenses, currencySettings, now = new Date()) {
+  let dueCount = 0
+  let billedCount = 0
+  let skippedCount = 0
+  let dueAmount = 0
+
+  for (const item of recurring) {
+    if (isDomainParent(item)) continue
+    const { status } = getBillingStatus(item, expenses, now)
+    if (status === 'due') {
+      dueCount++
+      dueAmount += convertToDisplay(Number(item.amount) || 0, item.currency, currencySettings)
+    } else if (status === 'billed') {
+      billedCount++
+    } else if (status === 'skipped') {
+      skippedCount++
+    }
+  }
+
+  return {
+    dueCount,
+    billedCount,
+    skippedCount,
+    dueAmount,
+    monthLabel: format(now, 'MMMM yyyy'),
+  }
+}
+
+function billingDateInMonth(year, month, billingDay) {
+  const lastDay = new Date(year, month, 0).getDate()
+  const day = Math.min(billingDay || 1, lastDay)
+  return new Date(year, month - 1, day)
+}
+
+/**
+ * Subscriptions billing within the next N days (current or next calendar month).
+ * @param {object[]} recurring
+ * @param {Date} [now]
+ * @param {number} [daysWindow]
+ * @returns {{ item: object, date: Date }[]}
+ */
+export function getUpcomingRenewals(recurring, now = new Date(), daysWindow = 30) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const cutoff = addDays(today, daysWindow)
+  const currentMonth = now.getMonth() + 1
+  const currentYear = now.getFullYear()
+  const next = addMonths(now, 1)
+  const nextMonth = next.getMonth() + 1
+  const nextYear = next.getFullYear()
+  const results = []
+
+  for (const item of recurring) {
+    if (item.active === false || isDomainParent(item)) continue
+    const freq = item.frequency || 'monthly'
+    const billingDay = item.billingDay || 1
+    const candidates = []
+
+    if (freq === 'monthly' || (freq === 'yearly' && (item.billingMonth || 1) === currentMonth)) {
+      candidates.push(billingDateInMonth(currentYear, currentMonth, billingDay))
+    }
+    if (freq === 'monthly' || (freq === 'yearly' && (item.billingMonth || 1) === nextMonth)) {
+      candidates.push(billingDateInMonth(nextYear, nextMonth, billingDay))
+    }
+
+    for (const date of candidates) {
+      if (date >= today && date <= cutoff) {
+        results.push({ item, date })
+        break
+      }
+    }
+  }
+
+  return results.sort((a, b) => a.date - b.date)
+}
 
 /**
  * Resolve top-level recurring id for grouping add-ons under a parent subscription.

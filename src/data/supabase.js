@@ -51,6 +51,7 @@ function recurringFromDB(r) {
     notes:        r.notes || '',
     endDate:      r.end_date,
     parentId:     r.parent_id || null,
+    skippedMonths: Array.isArray(r.skipped_months) ? r.skipped_months : [],
   }
 }
 
@@ -70,6 +71,7 @@ function recurringToDB(r, userId) {
     notes:         r.notes || '',
     end_date:      r.endDate || null,
     parent_id:     r.parentId || null,
+    skipped_months: r.skippedMonths || [],
   }
 }
 
