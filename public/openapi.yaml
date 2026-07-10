@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: Company Costing App — Ingest API
+  description: |
+    Server-side ingest endpoint for OpenAI token usage from internal apps
+    (e.g. `cae-gpt`, `beacon-social-media`). Cost is computed on the server;
+    callers send token counts only.
+
+    **Auth (v1):** No API key required. If the server has `INGEST_SECRET` set,
+    include matching `X-Ingest-Secret` header or requests receive `401`.
+
+    **Idempotency:** Reuse the same `requestId` on retries; duplicates return `409`.
+  version: 1.0.0
+
+servers:
+  - url: /
+    description: Current host (local, staging, or production)
+
+tags:
+  - name: OpenAI Usage
+    description: Token usage ingest for estimated cost tracking
+
+paths:
+  /api/openai-usage:
+    post:
+      tags:
+        - OpenAI Usage
+      summary: Ingest an OpenAI usage event
+      description: |
+        Records one OpenAI API call's token usage. `estimatedCostUsd` is calculated
+        server-side from the model pricing table. Unknown models are stored with
+        `estimatedCostUsd: 0`.
+      operationId: ingestOpenAiUsage
+      parameters:
+        - name: X-Ingest-Secret
+          in: header
+          required: false
+          description: |
+            Required when the server environment variable `INGEST_SECRET` is set.
+            Must match exactly; otherwise `401` is returned.
+          schema:
+            type: string
+          example: your-shared-ingest-secret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenAiUsageIngestRequest"
+            examples:
+              full:
+                summary: Full payload (recommended)
+                value:
+                  appId: cae-gpt
+                  appName: CAE GPT Assistant
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+                  model: gpt-4o-mini
+                  promptTokens: 1200
+                  completionTokens: 340
+                  totalTokens: 1540
+                  feature: summarize-report
+                  occurredAt: "2026-07-10T09:15:00Z"
+              minimal:
+                summary: Required fields only
+                value:
+                  appId: beacon-social-media
+                  model: gpt-4o
+                  promptTokens: 500
+                  completionTokens: 120
+                  totalTokens: 620
+                  occurredAt: "2026-07-10T12:00:00Z"
+      responses:
+        "201":
+          description: Usage event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAiUsageIngestResponse"
+              example:
+                id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                estimatedCostUsd: 0.000384
+                appId: cae-gpt
+                model: gpt-4o-mini
+        "400":
+          description: Invalid JSON or validation error (Zod)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidJson:
+                  summary: Malformed JSON body
+                  value:
+                    error: Invalid JSON body
+                validationFailed:
+                  summary: Zod validation failure
+                  value:
+                    error: Validation failed
+                    details:
+                      formErrors: []
+                      fieldErrors:
+                        appId:
+                          - appId is required
+                        totalTokens:
+                          - totalTokens (100) must equal promptTokens + completionTokens (1540), within 2 tokens
+        "401":
+          description: Missing or invalid X-Ingest-Secret when INGEST_SECRET is configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Invalid or missing X-Ingest-Secret header
+        "409":
+          description: Duplicate requestId (deduplication)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateRequestIdError"
+              example:
+                error: Duplicate requestId
+                requestId: 550e8400-e29b-41d4-a716-446655440000
+        "500":
+          description: Database or server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                insertFailed:
+                  summary: Insert failed
+                  value:
+                    error: Failed to store usage event
+                dedupCheckFailed:
+                  summary: Deduplication lookup failed
+                  value:
+                    error: Database error during deduplication check
+
+components:
+  schemas:
+    OpenAiUsageIngestRequest:
+      type: object
+      required:
+        - appId
+        - model
+        - promptTokens
+        - completionTokens
+        - totalTokens
+        - occurredAt
+      properties:
+        appId:
+          type: string
+          minLength: 1
+          description: Stable app identifier (lowercase kebab-case recommended)
+          example: cae-gpt
+        appName:
+          type: string
+          description: Human-readable label for dashboards
+          example: CAE GPT Assistant
+        requestId:
+          type: string
+          minLength: 1
+          description: Optional idempotency key; reuse on retries
+          example: 550e8400-e29b-41d4-a716-446655440000
+        model:
+          type: string
+          minLength: 1
+          description: OpenAI model name from the API response
+          example: gpt-4o-mini
+        promptTokens:
+          type: integer
+          minimum: 0
+          description: Input tokens (`usage.prompt_tokens`)
+          example: 1200
+        completionTokens:
+          type: integer
+          minimum: 0
+          description: Output tokens (`usage.completion_tokens`)
+          example: 340
+        totalTokens:
+          type: integer
+          minimum: 0
+          description: |
+            Total tokens (`usage.total_tokens`). Must equal
+            `promptTokens + completionTokens` within 2 tokens (server may coerce).
+          example: 1540
+        feature:
+          type: string
+          description: Optional feature label (e.g. chat, embed, summarize)
+          example: summarize-report
+        occurredAt:
+          type: string
+          format: date-time
+          description: When the OpenAI call occurred (ISO 8601)
+          example: "2026-07-10T09:15:00Z"
+
+    OpenAiUsageIngestResponse:
+      type: object
+      required:
+        - id
+        - estimatedCostUsd
+        - appId
+        - model
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Database row ID
+        estimatedCostUsd:
+          type: number
+          format: double
+          description: Server-computed estimated cost in USD
+        appId:
+          type: string
+        model:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        details:
+          type: object
+          description: Zod flatten() output when validation fails
+          additionalProperties: true
+
+    DuplicateRequestIdError:
+      type: object
+      required:
+        - error
+        - requestId
+      properties:
+        error:
+          type: string
+          example: Duplicate requestId
+        requestId:
+          type: string
+          example: 550e8400-e29b-41d4-a716-446655440000

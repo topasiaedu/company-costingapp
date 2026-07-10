@@ -323,4 +323,202 @@ Run `supabase-migration.sql` (or the `add_recurring_skipped_months` migration) o
 
 ---
 
+## Next.js + OpenAI usage (Agent 1)
+
+**Date:** 10 July 2026  
+**Scope:** Next.js scaffold, TypeScript, Tailwind, Supabase client modules, placeholder page
+
+### Implemented
+
+- **Toolchain:** Replaced Vite with Next.js 15 (App Router), TypeScript (strict), React 18. Scripts: `dev`, `build`, `start`. Removed `vite` and `@vitejs/plugin-react` from dependencies.
+- **Path alias:** `@/*` → project root (see comment in `tsconfig.json`). Agent 2 should import as `@/components/...`, `@/lib/...`, `@/types/...`.
+- **App Router:** `app/layout.tsx`, `app/page.tsx` (placeholder “migration in progress”), `app/not-found.tsx`.
+- **Styles:** `app/globals.css` copied from `src/index.css` (light/dark CSS variables, `.card`, `.sidebar`, P&L classes, etc.). `tailwind.config.js` scans `app/**`, `src/**`, `components/**`; accent theme preserved. `postcss.config.js` converted to CommonJS for Next.js compatibility.
+- **Supabase libs:** `lib/supabase/client.ts` (browser, `isSupabaseConfigured`, `createClient`), `lib/supabase/server.ts` (cookie-based server client), `lib/supabase/admin.ts` (service role, throws if key missing).
+- **Env:** `.env.example` updated with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, optional `INGEST_SECRET`; `VITE_*` marked deprecated.
+- **Vercel:** Removed `vercel.json` SPA rewrites — Next.js defaults apply.
+- **Types:** `types/index.ts` stub with `AppSettings` interface.
+- **Legacy:** `src/` left intact for Agent 2; `vite.config.js` and `index.html` still present (unused).
+
+### Build status
+
+- `npm run build` **passes** (Next.js 15.5.20, static `/` and `/_not-found`).
+- No Vite packages in `package.json` dependencies.
+
+### Blockers for Agent 2
+
+- Port all `src/` components and data layer to TypeScript; replace `import.meta.env.VITE_*` with `process.env.NEXT_PUBLIC_*`.
+- Update local `.env` and Vercel project settings: rename `VITE_SUPABASE_URL` → `NEXT_PUBLIC_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- Delete Vite artifacts when done: `src/main.jsx`, `index.html`, `vite.config.js`, and eventually empty `src/` after migration.
+- Wire `app/page.tsx` to `AppShell`; use `"use client"` on interactive components; dynamic-import Recharts if SSR hydration errors occur.
+
+---
+
+## Next.js + OpenAI usage (Agent 2)
+
+**Date:** 10 July 2026  
+**Scope:** Full Vite SPA → Next.js App Router migration with TypeScript feature parity (5 tabs)
+
+### Implemented
+
+- **Data layer (TypeScript):**
+  - `lib/data/supabase.ts` — all CRUD + auth; uses `process.env.NEXT_PUBLIC_*` via `@/lib/supabase/client`
+  - `lib/data/store.ts` — defaults, currency utils, P&L/subscription helpers
+  - `lib/data/parseMastersheetCsv.ts` — CSV import + `buildPnlGrid` / `slicePnlMonth`
+- **Components:** Migrated all `src/components/*` → `components/*.tsx` with `"use client"`; `@/` imports
+- **App shell:** `components/AppShell.tsx` — same state hub, 5 tabs (no AI Usage), sidebar collapse, auth flows
+- **Routes:** `app/page.tsx` renders `<AppShell />`; `app/auth/reset/page.tsx` for password reset redirect target
+- **Types:** `types/index.ts` — `Expense`, `Recurring`, `AppSettings`, `Category`, `Project`, `CurrencySettings`, import payloads
+- **Cleanup:** Deleted `src/`, `index.html`, `vite.config.js`; `tailwind.config.js` scans `app/**` + `components/**` only
+- **Env:** No `import.meta.env` or `VITE_*` in application code; `setup-supabase.js` updated to `NEXT_PUBLIC_*`
+
+### Migrated files
+
+| From | To |
+|------|-----|
+| `src/data/supabase.js` | `lib/data/supabase.ts` |
+| `src/data/store.js` | `lib/data/store.ts` |
+| `src/data/parseMastersheetCsv.js` | `lib/data/parseMastersheetCsv.ts` |
+| `src/App.jsx` | `components/AppShell.tsx` |
+| `src/components/*.jsx` (13 files) | `components/*.tsx` |
+| `src/ResetPasswordPage.jsx` | `app/auth/reset/page.tsx` |
+
+### Build status
+
+- `npm run build` **passes** (Next.js 15.5.20)
+- Routes: `/` (app shell), `/auth/reset`, `/_not-found`
+- First Load JS for `/`: ~320 kB (includes Recharts client bundle)
+
+### Manual steps
+
+- Rename local `.env` keys: `VITE_SUPABASE_URL` → `NEXT_PUBLIC_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Update Vercel project env vars to match `.env.example`
+
+### Blockers for Agent 3
+
+- None on app build. Agent 3 can add `openai_usage_events` migration, `lib/openai-pricing.ts`, and `app/api/openai-usage/route.ts` using existing `lib/supabase/admin.ts`.
+- Optional follow-up: remove `// @ts-nocheck` from large ported files (`store.ts`, `parseMastersheetCsv.ts`, `RecurringManager.tsx`, etc.) by adding full strict types incrementally.
+
+---
+
+## Next.js + OpenAI usage (Agent 3)
+
+**Date:** 10 July 2026  
+**Scope:** `openai_usage_events` schema, server-side pricing, POST `/api/openai-usage` ingest (no UI)
+
+### Implemented
+
+- **Migration (`supabase-migration.sql`):** Table `openai_usage_events` with all plan §4.1 columns; partial unique index on `request_id`; indexes on `occurred_at` and `app_id`. RLS enabled — `SELECT` for `authenticated` only; writes via service role (no anon insert policy). Applied to live Supabase project via MCP.
+- **Pricing (`lib/openai-pricing.ts`):** `OPENAI_PRICING_VERSION` = `"2026-07-10"`; `getModelPricing` / `estimateCostUsd` for gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o1-mini, o3-mini. Unknown models → cost `0` + server warning.
+- **Validation (`lib/validations/openai-usage.ts`):** Zod `openaiUsageIngestSchema`; coerces `totalTokens` when within 2 of `promptTokens + completionTokens`.
+- **API (`app/api/openai-usage/route.ts`):** POST only; optional `X-Ingest-Secret` when `INGEST_SECRET` set; 400 on validation error; 409 on duplicate `requestId`; 201 with `{ id, estimatedCostUsd, appId, model }`.
+- **Types:** `OpenAiUsageEvent` in `types/index.ts`.
+- **Dependency:** `zod` added to `package.json`.
+
+### Example cost check
+
+`gpt-4o-mini` with 1200 prompt + 340 completion tokens → `estimatedCostUsd` ≈ **0.000384** (input $0.15/1M, output $0.60/1M).
+
+### Build status
+
+- `npm run build` **passes** (includes dynamic route `ƒ /api/openai-usage`).
+
+### Manual steps
+
+1. Run the Agent 3 section of `supabase-migration.sql` in Supabase SQL Editor if not already applied (live project migrated via MCP during Agent 3).
+2. Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` / Vercel for ingest writes.
+3. Optionally set `INGEST_SECRET` and send `X-Ingest-Secret` header from calling apps.
+
+### curl example
+
+```bash
+curl -X POST http://localhost:3000/api/openai-usage \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appId": "cae-gpt",
+    "appName": "CAE GPT Assistant",
+    "requestId": "550e8400-e29b-41d4-a716-446655440000",
+    "model": "gpt-4o-mini",
+    "promptTokens": 1200,
+    "completionTokens": 340,
+    "totalTokens": 1540,
+    "feature": "summarize-report",
+    "occurredAt": "2026-07-10T09:15:00Z"
+  }'
+```
+
+### Blockers for Agent 4
+
+- **RPC not yet created:** `get_openai_usage_summary` and optional `get_openai_usage_events` functions still needed in `supabase-migration.sql`.
+- **No UI tab:** `AppShell` still has 5 tabs — Agent 4 adds AI Usage tab + `OpenAiUsage.tsx`.
+- **Seed data recommended:** POST 3–5 events via curl (different `appId`s) before testing charts.
+- **Client helper:** `lib/data/openai-usage.ts` for RPC calls not yet created.
+
+---
+
+## Next.js + OpenAI usage (Agent 4)
+
+**Date:** 10 July 2026  
+**Scope:** Supabase RPC aggregations, AI Usage page, 6th sidebar tab
+
+### Implemented
+
+- **RPC (`supabase-migration.sql` + live Supabase via MCP):**
+  - `get_openai_usage_summary(p_date_from, p_date_to)` → JSON with `totals`, `by_app`, `by_model`, `daily_trend`, `previous_period` (equal-length prior window for trend badge).
+  - `get_openai_usage_events(p_date_from, p_date_to, p_app_id, p_limit)` → recent event rows for optional drill-down.
+  - `GRANT EXECUTE` to `authenticated`; `SECURITY INVOKER` respects RLS on `openai_usage_events`.
+- **Client helper (`lib/data/openai-usage.ts`):** `fetchUsageSummary`, `fetchUsageEvents`, typed summary/event interfaces with safe JSON parsing.
+- **UI (`components/OpenAiUsage.tsx`):** Date range + quick ranges (This month, Last 3/6/12 mo); stat cards (tokens, est. cost USD + MYR via `currencySettings`, requests, avg tokens/request, cost trend badge); Recharts bar (by app), line (daily trend), pie (by model); apps-ranked table with MYR column when display ≠ USD; empty state with `POST /api/openai-usage` hint.
+- **Nav (`components/AppShell.tsx`):** 6th tab `{ id: 'ai-usage', label: 'AI Usage', icon: Cpu }`; header subtitle for AI Usage.
+
+### Build status
+
+- `npm run build` **passes** (Next.js 15.5.20).
+
+### Manual verification
+
+1. Seed 3–5 events via curl (different `appId`s, models, dates within range).
+2. Log in → **AI Usage** tab → confirm cards/charts/table populate.
+3. Change date range → data refreshes.
+4. Clear data or pick empty range → empty state appears.
+
+### Blockers for Agent 5
+
+- None on RPC or UI. Agent 5 can add OpenAPI spec + Swagger UI at `/api-docs` documenting `POST /api/openai-usage`.
+- Optional: link to `/api-docs` from AI Usage empty state after Agent 5 lands.
+
+---
+
+## Next.js + OpenAI usage (Agent 5)
+
+**Date:** 10 July 2026  
+**Scope:** OpenAPI 3.0 spec + Swagger UI at `/api-docs` (final agent)
+
+### Implemented
+
+- **OpenAPI spec (`public/openapi.yaml`):** Hand-written OpenAPI 3.0.3 matching `app/api/openai-usage/route.ts` and `lib/validations/openai-usage.ts`. Documents `POST /api/openai-usage` with all camelCase request fields, optional `X-Ingest-Secret` header, tag **OpenAI Usage**, info title **Company Costing App — Ingest API**. Responses `201`, `400`, `401`, `409`, `500` with copy-pasteable examples (full + minimal request bodies).
+- **Swagger UI (`app/api-docs/page.tsx`):** Client-only page; `swagger-ui-react` loaded via `dynamic(..., { ssr: false })` to avoid SSR errors. Loads spec from `/openapi.yaml`. Header with link back to main app; uses app CSS variables for background/card.
+- **Dependencies:** `swagger-ui-react`, `@types/swagger-ui-react` (dev).
+- **Docs:** `docs/README.md` — API documentation section linking to `/api-docs` and `public/openapi.yaml`.
+
+### Build status
+
+- `npm run build` **passes** (route `/api-docs` static; `/openapi.yaml` served from `public/`).
+
+### Manual verification
+
+1. Run app → open **`/api-docs`** → Swagger UI renders without hydration errors.
+2. Expand **POST /api/openai-usage** → request schema shows all fields; example body is copy-pasteable.
+3. **Try it out** against local dev: valid body → `201`; duplicate `requestId` → `409`.
+
+### Section 10 checklists (docs/08)
+
+All items in [08-nextjs-openai-usage-plan.md](./08-nextjs-openai-usage-plan.md) §10 are now **verifiable** via manual test (Agents 2–5 complete). Swagger subsection:
+
+- [ ] `/api-docs` loads Swagger UI
+- [ ] `POST /api/openai-usage` documented with request schema
+- [ ] Try-it-out works against local/staging
+
+---
+
 *This document supersedes informal chat decisions for the topics above. Update it when subscription amounts, domain inventory, or business rules change.*

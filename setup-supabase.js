@@ -17,7 +17,7 @@ console.log('Company Costing App — Supabase setup instructions\n')
 console.log('1. Open your project: https://supabase.com/dashboard → SQL Editor → New Query')
 console.log('2. Paste the contents of supabase-setup.sql (shown below) and click Run')
 console.log('3. Confirm tables exist: expenses, recurring, settings, categories, currency_settings, projects')
-console.log('4. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env (see .env.example)\n')
+console.log("4. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env (see .env.example)\n");
 console.log('─'.repeat(60))
 console.log('')
 

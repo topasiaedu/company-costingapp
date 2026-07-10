@@ -3,11 +3,19 @@ node_modules/
 
 # Build
 dist/
+.next/
+out/
+
+# TypeScript incremental
+*.tsbuildinfo
 
 # Env / secrets
 .env
 .env.local
 .env.*.local
+
+# Vercel
+.vercel/
 
 # OS / editor
 .DS_Store
