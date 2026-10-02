@@ -84,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_user_id     ON categories (user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id       ON projects (user_id);
 
 -- ── Row Level Security ────────────────────────────────────────────────────────
--- Each user can only access their own rows (user_id = auth.uid())
+-- Shared company workspace: any signed-in user can access all costing rows.
 
 ALTER TABLE expenses           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recurring          ENABLE ROW LEVEL SECURITY;
@@ -94,61 +94,61 @@ ALTER TABLE currency_settings  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects           ENABLE ROW LEVEL SECURITY;
 
 -- expenses
-CREATE POLICY "expenses_select_own" ON expenses
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "expenses_insert_own" ON expenses
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "expenses_update_own" ON expenses
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "expenses_delete_own" ON expenses
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "expenses_select_authenticated" ON expenses
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "expenses_insert_authenticated" ON expenses
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "expenses_update_authenticated" ON expenses
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "expenses_delete_authenticated" ON expenses
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- recurring
-CREATE POLICY "recurring_select_own" ON recurring
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "recurring_insert_own" ON recurring
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "recurring_update_own" ON recurring
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "recurring_delete_own" ON recurring
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "recurring_select_authenticated" ON recurring
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "recurring_insert_authenticated" ON recurring
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "recurring_update_authenticated" ON recurring
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "recurring_delete_authenticated" ON recurring
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- settings
-CREATE POLICY "settings_select_own" ON settings
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "settings_insert_own" ON settings
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "settings_update_own" ON settings
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "settings_delete_own" ON settings
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "settings_select_authenticated" ON settings
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "settings_insert_authenticated" ON settings
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "settings_update_authenticated" ON settings
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "settings_delete_authenticated" ON settings
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- categories
-CREATE POLICY "categories_select_own" ON categories
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "categories_insert_own" ON categories
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "categories_update_own" ON categories
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "categories_delete_own" ON categories
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "categories_select_authenticated" ON categories
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "categories_insert_authenticated" ON categories
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "categories_update_authenticated" ON categories
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "categories_delete_authenticated" ON categories
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- currency_settings
-CREATE POLICY "currency_settings_select_own" ON currency_settings
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "currency_settings_insert_own" ON currency_settings
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "currency_settings_update_own" ON currency_settings
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "currency_settings_delete_own" ON currency_settings
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "currency_settings_select_authenticated" ON currency_settings
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "currency_settings_insert_authenticated" ON currency_settings
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "currency_settings_update_authenticated" ON currency_settings
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "currency_settings_delete_authenticated" ON currency_settings
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);
 
 -- projects
-CREATE POLICY "projects_select_own" ON projects
-  FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "projects_insert_own" ON projects
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "projects_update_own" ON projects
-  FOR UPDATE USING (auth.uid()::text = user_id);
-CREATE POLICY "projects_delete_own" ON projects
-  FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "projects_select_authenticated" ON projects
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL);
+CREATE POLICY "projects_insert_authenticated" ON projects
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "projects_update_authenticated" ON projects
+  FOR UPDATE TO authenticated USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "projects_delete_authenticated" ON projects
+  FOR DELETE TO authenticated USING (auth.uid() IS NOT NULL);

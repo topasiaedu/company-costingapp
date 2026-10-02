@@ -11,6 +11,13 @@ import type {
 
 export { isSupabaseConfigured };
 
+/**
+ * Shared company workspace owner.
+ * All costing rows live under this user_id so every signed-in teammate
+ * (e.g. support@topasiaedu.com) sees and edits the same data.
+ */
+export const DATA_OWNER_USER_ID = "150b1d7d-dd8a-42ee-a8bd-445681e1ef14";
+
 /** Singleton browser client; null when env vars are missing. */
 export const supabase = createClient();
 
@@ -19,6 +26,11 @@ function getClient() {
     throw new Error("Supabase is not configured");
   }
   return supabase;
+}
+
+/** Map any logged-in user onto the shared company data owner. */
+function resolveDataUserId(_userId: string): string {
+  return DATA_OWNER_USER_ID;
 }
 
 interface DbRecurring {
@@ -144,19 +156,21 @@ function expenseFromDB(e: DbExpense): Expense {
 // ── Expenses ────────────────────────────────────────────────────────
 
 export async function loadExpenses(userId: string): Promise<DataResult<Expense[]>> {
+  const dataUserId = resolveDataUserId(userId);
   const { data, error } = await getClient()
     .from("expenses")
     .select("*")
-    .eq("user_id", userId)
+    .eq("user_id", dataUserId)
     .order("date", { ascending: false });
   if (error) console.error("loadExpenses:", error);
   return { data: (data || []).map((row) => expenseFromDB(row as DbExpense)), error };
 }
 
 export async function saveExpense(expense: Expense, userId: string) {
+  const dataUserId = resolveDataUserId(userId);
   const row = {
     id: expense.id,
-    user_id: userId,
+    user_id: dataUserId,
     name: expense.name,
     category: expense.category,
     amount: Number(expense.amount),
@@ -193,16 +207,17 @@ export async function deleteExpensesByRecurringId(recurringId: string) {
 // ── Recurring ───────────────────────────────────────────────────────
 
 export async function loadRecurring(userId: string): Promise<DataResult<Recurring[]>> {
+  const dataUserId = resolveDataUserId(userId);
   const { data, error } = await getClient()
     .from("recurring")
     .select("*")
-    .eq("user_id", userId);
+    .eq("user_id", dataUserId);
   if (error) console.error("loadRecurring:", error);
   return { data: (data || []).map((row) => recurringFromDB(row as DbRecurring)), error };
 }
 
 export async function saveOneRecurring(item: Recurring, userId: string) {
-  const row = recurringToDB(item, userId);
+  const row = recurringToDB(item, resolveDataUserId(userId));
   const { data, error } = await getClient().from("recurring").upsert([row], { onConflict: "id" });
   if (error) console.error("saveOneRecurring:", error);
   return { data, error };
@@ -229,7 +244,8 @@ function settingsFromDB(s: DbSettings | null): AppSettings | null {
 }
 
 export async function loadSettings(userId: string): Promise<DataResult<AppSettings | null>> {
-  const { data, error } = await getClient().from("settings").select("*").eq("user_id", userId).single();
+  const dataUserId = resolveDataUserId(userId);
+  const { data, error } = await getClient().from("settings").select("*").eq("user_id", dataUserId).single();
   if (error && error.code !== "PGRST116") console.error("loadSettings:", error);
   return {
     data: settingsFromDB(data as DbSettings | null),
@@ -238,9 +254,10 @@ export async function loadSettings(userId: string): Promise<DataResult<AppSettin
 }
 
 export async function saveSettings(settings: AppSettings, userId: string) {
+  const dataUserId = resolveDataUserId(userId);
   const row = {
-    id: `settings_${userId}`,
-    user_id: userId,
+    id: `settings_${dataUserId}`,
+    user_id: dataUserId,
     company_name: settings.companyName || "Company Costs",
     tagline: settings.tagline || "Cost tracking dashboard",
     theme: settings.theme || "light",
@@ -253,13 +270,15 @@ export async function saveSettings(settings: AppSettings, userId: string) {
 // ── Categories ──────────────────────────────────────────────────────
 
 export async function loadCategories(userId: string): Promise<DataResult<Category[]>> {
-  const { data, error } = await getClient().from("categories").select("*").eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { data, error } = await getClient().from("categories").select("*").eq("user_id", dataUserId);
   if (error) console.error("loadCategories:", error);
   return { data: (data || []) as Category[], error };
 }
 
 export async function saveCategories(categories: Category[], userId: string) {
-  const { error: delErr } = await getClient().from("categories").delete().eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { error: delErr } = await getClient().from("categories").delete().eq("user_id", dataUserId);
   if (delErr) {
     console.error("saveCategories delete:", delErr);
     return { error: delErr };
@@ -267,7 +286,7 @@ export async function saveCategories(categories: Category[], userId: string) {
   if (categories.length === 0) return { error: null };
   const rows = categories.map((c) => ({
     id: c.id || `cat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    user_id: userId,
+    user_id: dataUserId,
     name: c.name,
     color: c.color,
   }));
@@ -279,10 +298,11 @@ export async function saveCategories(categories: Category[], userId: string) {
 // ── Currency Settings ───────────────────────────────────────────────
 
 export async function loadCurrencySettings(userId: string): Promise<DataResult<CurrencySettings | null>> {
+  const dataUserId = resolveDataUserId(userId);
   const { data, error } = await getClient()
     .from("currency_settings")
     .select("*")
-    .eq("user_id", userId)
+    .eq("user_id", dataUserId)
     .single();
   if (error && error.code !== "PGRST116") console.error("loadCurrencySettings:", error);
   const mapped = data
@@ -295,9 +315,10 @@ export async function loadCurrencySettings(userId: string): Promise<DataResult<C
 }
 
 export async function saveCurrencySettings(settings: CurrencySettings, userId: string) {
+  const dataUserId = resolveDataUserId(userId);
   const row = {
-    id: `currency_${userId}`,
-    user_id: userId,
+    id: `currency_${dataUserId}`,
+    user_id: dataUserId,
     display_currency: settings.display || "MYR",
     rates: settings.rates || {},
   };
@@ -309,7 +330,8 @@ export async function saveCurrencySettings(settings: CurrencySettings, userId: s
 // ── Projects ────────────────────────────────────────────────────────
 
 export async function loadProjects(userId: string): Promise<DataResult<Project[]>> {
-  const { data, error } = await getClient().from("projects").select("*").eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { data, error } = await getClient().from("projects").select("*").eq("user_id", dataUserId);
   if (error) {
     console.error("loadProjects:", error);
     return { data: [], error };
@@ -318,7 +340,8 @@ export async function loadProjects(userId: string): Promise<DataResult<Project[]
 }
 
 export async function saveProjects(projects: Project[], userId: string) {
-  const { error: delErr } = await getClient().from("projects").delete().eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { error: delErr } = await getClient().from("projects").delete().eq("user_id", dataUserId);
   if (delErr) {
     console.error("saveProjects delete:", delErr);
     return { error: delErr };
@@ -326,7 +349,7 @@ export async function saveProjects(projects: Project[], userId: string) {
   if (projects.length === 0) return { error: null };
   const rows = projects.map((p) => ({
     id: p.id || `proj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    user_id: userId,
+    user_id: dataUserId,
     name: p.name,
     color: p.color,
   }));
@@ -337,9 +360,10 @@ export async function saveProjects(projects: Project[], userId: string) {
 
 export async function saveExpensesBatch(expenses: Expense[], userId: string) {
   if (!expenses.length) return { error: null };
+  const dataUserId = resolveDataUserId(userId);
   const rows = expenses.map((expense) => ({
     id: expense.id,
-    user_id: userId,
+    user_id: dataUserId,
     name: expense.name,
     category: expense.category,
     amount: Number(expense.amount),
@@ -357,20 +381,23 @@ export async function saveExpensesBatch(expenses: Expense[], userId: string) {
 
 export async function saveRecurringBatch(items: Recurring[], userId: string) {
   if (!items.length) return { error: null };
-  const rows = items.map((r) => recurringToDB(r, userId));
+  const dataUserId = resolveDataUserId(userId);
+  const rows = items.map((r) => recurringToDB(r, dataUserId));
   const { error } = await getClient().from("recurring").upsert(rows, { onConflict: "id" });
   if (error) console.error("saveRecurringBatch:", error);
   return { error };
 }
 
 export async function deleteAllUserExpenses(userId: string) {
-  const { error } = await getClient().from("expenses").delete().eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { error } = await getClient().from("expenses").delete().eq("user_id", dataUserId);
   if (error) console.error("deleteAllUserExpenses:", error);
   return { error };
 }
 
 export async function deleteAllUserRecurring(userId: string) {
-  const { error } = await getClient().from("recurring").delete().eq("user_id", userId);
+  const dataUserId = resolveDataUserId(userId);
+  const { error } = await getClient().from("recurring").delete().eq("user_id", dataUserId);
   if (error) console.error("deleteAllUserRecurring:", error);
   return { error };
 }

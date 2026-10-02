@@ -246,6 +246,8 @@ export const DEFAULT_PROJECTS = [
   { name: 'CAE', color: '#3b82f6' },
   { name: 'Dr Jasmine', color: '#ec4899' },
   { name: 'Jeff', color: '#f59e0b' },
+  { name: 'Lucas', color: '#10b981' },
+  { name: 'Kaelyn', color: '#8b5cf6' },
 ]
 
 export const EXPENSE_TYPES = {
