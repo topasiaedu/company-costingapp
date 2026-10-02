@@ -12,11 +12,11 @@ import type {
 export { isSupabaseConfigured };
 
 /**
- * Shared company workspace owner.
+ * Shared company workspace owner (support@topasiaedu.com).
  * All costing rows live under this user_id so every signed-in teammate
- * (e.g. support@topasiaedu.com) sees and edits the same data.
+ * sees and edits the same data.
  */
-export const DATA_OWNER_USER_ID = "150b1d7d-dd8a-42ee-a8bd-445681e1ef14";
+export const DATA_OWNER_USER_ID = "5c45aa7b-bde0-4596-bb75-ffa38e8979a1";
 
 /** Singleton browser client; null when env vars are missing. */
 export const supabase = createClient();
